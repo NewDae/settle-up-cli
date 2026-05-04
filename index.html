@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Settle Down API Tester</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">Sandbox Toolkit</p>
+          <h1>API Tester</h1>
+          <p class="lede">
+            Load a known preset, adjust the request, send it, then compare the last response without losing it
+            while you keep editing.
+          </p>
+        </div>
+
+        <section class="side-panel">
+          <div class="side-panel-header">
+            <h2>Request Flow</h2>
+            <span class="pill">Docs Style</span>
+          </div>
+          <ol class="side-list">
+            <li>Choose a preset as a starting point.</li>
+            <li>Adjust method, URL, params, headers, or body.</li>
+            <li>Send the request when the resolved request looks right.</li>
+            <li>Keep the last response visible until the next submission finishes.</li>
+          </ol>
+        </section>
+
+        <section class="side-panel">
+          <div class="side-panel-header">
+            <h2>Persistence</h2>
+          </div>
+          <p class="muted">
+            Draft edits are auto-saved locally. The most recent response snapshot also stays saved across refreshes
+            until you submit a new request.
+          </p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <section class="hero-panel">
+          <div class="hero-copy">
+            <p class="eyebrow">API Console</p>
+            <h2>Compose requests on the left, inspect the last result on the right.</h2>
+            <p class="muted">
+              Presets, resets, and draft saves now affect only the request composer. The response panel is treated as
+              a stable snapshot until the next request completes.
+            </p>
+          </div>
+
+          <dl class="hero-metrics">
+            <div>
+              <dt>Last Status</dt>
+              <dd id="responseStatus">Idle</dd>
+            </div>
+            <div>
+              <dt>Duration</dt>
+              <dd id="responseDuration">--</dd>
+            </div>
+            <div>
+              <dt>Bytes</dt>
+              <dd id="responseSize">--</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="editor-grid">
+          <section class="panel request-panel">
+            <div class="panel-header panel-header-stack">
+              <div>
+                <p class="panel-kicker">Request Composer</p>
+                <h2>Build the next request</h2>
+              </div>
+              <div class="panel-actions wrap-actions">
+                <button id="saveRequestButton" class="ghost-button" type="button">Save Draft</button>
+                <button id="resetRequestButton" class="ghost-button" type="button">Reset To Default</button>
+                <button id="sendRequestButton" class="primary-button" type="button">Send Request</button>
+              </div>
+            </div>
+
+            <section class="preset-strip">
+              <div class="preset-strip-header">
+                <div>
+                  <p class="panel-kicker">Preset</p>
+                  <h3>Start from a documented request</h3>
+                </div>
+                <span id="requestStateBadge" class="pill subtle-pill">Auto-saved draft</span>
+              </div>
+
+              <div class="preset-grid">
+                <label class="stacked-field">
+                  <span>Preset Request</span>
+                  <select id="presetSelect"></select>
+                </label>
+
+                <div class="preset-actions">
+                  <button id="applyPresetButton" class="ghost-button" type="button">Load Preset</button>
+                </div>
+              </div>
+
+              <p id="presetDescription" class="muted preset-description"></p>
+              <p id="composerStatus" class="inline-status" aria-live="polite">
+                Draft changes are saved locally as you type.
+              </p>
+            </section>
+
+            <div class="request-line">
+              <label class="stacked-field method-field">
+                <span>Method</span>
+                <select id="methodInput">
+                  <option>GET</option>
+                  <option>POST</option>
+                  <option>PUT</option>
+                  <option>PATCH</option>
+                  <option>DELETE</option>
+                  <option>OPTIONS</option>
+                  <option>HEAD</option>
+                </select>
+              </label>
+
+              <label class="stacked-field url-field">
+                <span>URL</span>
+                <input id="urlInput" type="text" placeholder="https://example.com/endpoint" spellcheck="false" />
+              </label>
+            </div>
+
+            <div class="subpanel resolved-subpanel">
+              <div class="subpanel-header">
+                <div>
+                  <h3>Resolved Request Preview</h3>
+                  <p class="muted small-muted">This is the exact request shape that will be sent next.</p>
+                </div>
+              </div>
+              <pre id="resolvedRequestPreview" class="code-block compact-code-block">Resolved request details will appear here.</pre>
+            </div>
+
+            <div class="grid-layout dual-grid">
+              <section class="subpanel">
+                <div class="subpanel-header">
+                  <h3>Query Params</h3>
+                  <button id="addQueryParamButton" class="ghost-button small-button" type="button">Add Param</button>
+                </div>
+                <div id="queryParamsList" class="kv-list"></div>
+              </section>
+
+              <section class="subpanel">
+                <div class="subpanel-header">
+                  <h3>Headers</h3>
+                  <button id="addHeaderButton" class="ghost-button small-button" type="button">Add Header</button>
+                </div>
+                <div id="headersList" class="kv-list"></div>
+              </section>
+            </div>
+
+            <section class="subpanel">
+              <div class="subpanel-header">
+                <h3>Body</h3>
+                <div class="inline-meta">
+                  <label class="inline-toggle">
+                    <input id="bodyEnabledInput" type="checkbox" />
+                    <span>Include Body</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="body-toolbar">
+                <label class="stacked-field compact-field">
+                  <span>Mode</span>
+                  <select id="bodyModeInput">
+                    <option value="json">JSON</option>
+                    <option value="text">Plain Text</option>
+                  </select>
+                </label>
+                <button id="formatBodyButton" class="ghost-button small-button" type="button">Format</button>
+              </div>
+
+              <label class="stacked-field">
+                <span>Payload</span>
+                <textarea id="bodyInput" rows="12" spellcheck="false"></textarea>
+              </label>
+            </section>
+          </section>
+
+          <section class="panel response-panel">
+            <div class="panel-header panel-header-stack">
+              <div>
+                <p class="panel-kicker">Last Response</p>
+                <h2>Inspect the current snapshot</h2>
+              </div>
+              <div class="panel-actions wrap-actions">
+                <button id="copyActiveResponseButton" class="ghost-button small-button" type="button">Copy Body</button>
+              </div>
+            </div>
+
+            <p id="responseSummary" class="inline-status" aria-live="polite">
+              No request has been sent yet. The first response will stay here until another request completes.
+            </p>
+
+            <div class="response-tabs" role="tablist" aria-label="Response Views">
+              <button class="tab-button is-active" data-tab="body" type="button" aria-selected="true">Body</button>
+              <button class="tab-button" data-tab="headers" type="button" aria-selected="false">Headers</button>
+              <button class="tab-button" data-tab="request" type="button" aria-selected="false">Resolved Request</button>
+            </div>
+
+            <section id="responseBodyTab" class="response-tab is-active" data-tab-panel="body">
+              <pre id="responseBodyOutput" class="code-block">No request sent yet.</pre>
+            </section>
+
+            <section id="responseHeadersTab" class="response-tab" data-tab-panel="headers">
+              <pre id="responseHeadersOutput" class="code-block">Headers will appear here.</pre>
+            </section>
+
+            <section id="responseRequestTab" class="response-tab" data-tab-panel="request">
+              <pre id="resolvedRequestOutput" class="code-block">Resolved request details will appear here.</pre>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <template id="kvRowTemplate">
+      <div class="kv-row">
+        <input class="kv-key" type="text" placeholder="Key" spellcheck="false" />
+        <input class="kv-value" type="text" placeholder="Value" spellcheck="false" />
+        <label class="kv-checkbox">
+          <input class="kv-enabled" type="checkbox" checked />
+          <span>On</span>
+        </label>
+        <button class="danger-button kv-remove" type="button" aria-label="Remove row">Remove</button>
+      </div>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

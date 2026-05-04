@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+
+# Local CLI sessions and generated live-run reports
+.settleup-cli/
+integration-reports/*.md
