@@ -4,3 +4,8 @@ node_modules/
 # Local CLI sessions and generated live-run reports
 .settleup-cli/
 integration-reports/*.md
+
+# Internal API tester UI, kept local only
+app.js
+index.html
+styles.css
