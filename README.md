@@ -119,5 +119,4 @@ test/                             Contract and sandbox tests
 CLI_SPEC.md                       CLI contract and API mapping
 API_REFERENCE.md                  Backend endpoints and sandbox path mapping
 Tests.md                          Test coverage notes and commands
-index.html, app.js, styles.css    Existing sandbox API tester UI
 ```
