@@ -20,21 +20,56 @@ Deterministic JSON-only CLI for exercising the Settle Up sandbox API. The instal
 - Patch commands preserve omitted fields; provided arrays/objects replace the stored field.
 - The CLI does not do fuzzy name matching before writes.
 
-## Main Commands
+## Requirements
+
+- Node.js 18 or newer.
+- Network access to Firebase Auth and the Settle Up sandbox API for live CLI usage.
+- No npm package install is required; the CLI uses built-in Node APIs only.
+
+## Install And Run
+
+Clone the repo:
 
 ```bash
-settleup auth login
-settleup auth status
-settleup users me
-settleup groups create --input -
-settleup members add --group-id <groupId> --input -
-settleup expenses create --group-id <groupId> --input -
-settleup transactions list --group-id <groupId>
-settleup transactions update --group-id <groupId> --transaction-id <transactionId> --input -
-settleup transactions delete --group-id <groupId> --transaction-id <transactionId>
-settleup debts recalculate --group-id <groupId>
-settleup debts list --group-id <groupId>
+git clone https://github.com/NewDae/settle-up-cli.git
+cd settle-up-cli
 ```
+
+Run directly with Node:
+
+```bash
+node bin/settleup.mjs --help
+```
+
+Optionally link the command locally:
+
+```bash
+npm link
+settleup --help
+```
+
+## Main Commands
+
+| Command | What it does |
+|---|---|
+| `settleup auth login` | Signs in to the sandbox and stores a local session. |
+| `settleup auth status` | Shows whether a local session exists. |
+| `settleup users me` | Reads the current app-level user profile. |
+| `settleup groups list` | Lists groups visible to the logged-in user. |
+| `settleup groups get --group-id <groupId>` | Fetches one group, permissions, and the caller's group link. |
+| `settleup groups create --input -` | Creates a group, first member, permission entry, and user-group link. |
+| `settleup members list --group-id <groupId>` | Lists members in a group. |
+| `settleup members add --group-id <groupId> --input -` | Adds a member to a group. |
+| `settleup members update --group-id <groupId> --member-id <memberId> --input -` | Patches selected member fields. |
+| `settleup categories set --group-id <groupId> --input -` | Patches custom category labels for a group. |
+| `settleup expenses create --group-id <groupId> --input -` | Creates an expense transaction. |
+| `settleup transfers create --group-id <groupId> --input -` | Creates a transfer transaction, including settlement transfers. |
+| `settleup transactions list --group-id <groupId>` | Lists transactions, with optional filters for member, category, type, date, and order. |
+| `settleup transactions update --group-id <groupId> --transaction-id <transactionId> --input -` | Patches selected transaction fields. |
+| `settleup transactions delete --group-id <groupId> --transaction-id <transactionId>` | Deletes one transaction. |
+| `settleup debts recalculate --group-id <groupId>` | Triggers backend recalculation of derived debts. |
+| `settleup debts list --group-id <groupId>` | Reads server-calculated debts for a group. |
+| `settleup changes list --group-id <groupId>` | Reads the group change log. |
 
 Use schema help for write payloads:
 
