@@ -10,11 +10,37 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const cliPath = path.join(repoRoot, 'bin', 'settleup.mjs');
 const reportsDir = path.join(repoRoot, 'integration-reports');
-const sandboxApiKey = process.env.SETTLEUP_SANDBOX_API_KEY || 'AIzaSyCBsW4lveImpcB92c-cnNg2VQgx9JdijU8';
+await loadDotEnv(process.env.SETTLEUP_ENV_FILE || '.env');
+const firebaseApiKey = process.env.SETTLEUP_FIREBASE_API_KEY;
 const configDir = await fs.mkdtemp(path.join(os.tmpdir(), 'settleup-cli-e2e-'));
 const runStartedAt = new Date();
 const runStamp = runStartedAt.toISOString().replace(/[:.]/g, '-');
 const steps = [];
+
+async function loadDotEnv(filePath = '.env') {
+  let text;
+  try {
+    text = await fs.readFile(path.isAbsolute(filePath) ? filePath : path.join(repoRoot, filePath), 'utf8');
+  } catch {
+    return;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const separator = trimmed.indexOf('=');
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || Object.hasOwn(process.env, key)) continue;
+    let value = trimmed.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
 
 function cents(amount) {
   const [whole, fraction = ''] = String(amount).split('.');
@@ -73,10 +99,11 @@ function calculateDebts(transactions) {
 }
 
 async function signUpSandboxUser() {
+  assert.ok(firebaseApiKey, 'SETTLEUP_FIREBASE_API_KEY is required for integration user signup');
   const email = `cli-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
   const password = 'CodexTest123!';
   const response = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(sandboxApiKey)}`,
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseApiKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -175,7 +202,7 @@ async function main() {
     check: (json) => {
       assert.equal(json.data.authenticated, true);
       assert.equal(json.data.uid, login.data.uid);
-      return 'Auth status shows the same signed-in sandbox user.';
+      return 'Auth status shows the same signed-in staging user.';
     },
   });
 
@@ -363,7 +390,7 @@ async function main() {
   await runCli(['debts', 'recalculate', '--group-id', groupId], {
     check: (json) => {
       assert.equal(typeof json.data.taskId, 'string');
-      return 'Debt recalculation task was accepted by the sandbox.';
+      return 'Debt recalculation task was accepted by the configured backend.';
     },
   });
 

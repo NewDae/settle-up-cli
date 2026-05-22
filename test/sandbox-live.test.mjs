@@ -5,8 +5,8 @@ import { shouldRunLiveSandboxTests } from './helpers/spec-validators.mjs';
 
 const env = process.env;
 const runLive = shouldRunLiveSandboxTests(env);
-const sandboxApiKey = env.SETTLEUP_SANDBOX_API_KEY || 'AIzaSyCBsW4lveImpcB92c-cnNg2VQgx9JdijU8';
-const sandboxDbUrl = env.SETTLEUP_SANDBOX_DB_URL || 'https://settle-up-sandbox.firebaseio.com';
+const firebaseApiKey = env.SETTLEUP_FIREBASE_API_KEY || '';
+const backendBaseUrl = env.SETTLEUP_API_BASE_URL || '';
 
 let tempUser;
 let tempUserRecord;
@@ -27,7 +27,7 @@ async function signUpWithPassword() {
   const email = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
   const password = 'CodexTest123!';
   const url =
-    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(sandboxApiKey)}`;
+    `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseApiKey)}`;
   const { response, json } = await fetchJson(url, {
     method: 'POST',
     headers: {
@@ -50,7 +50,7 @@ async function signUpWithPassword() {
 
 async function signInWithPassword(email, password) {
   const url =
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(sandboxApiKey)}`;
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(firebaseApiKey)}`;
   const { response, json } = await fetchJson(url, {
     method: 'POST',
     headers: {
@@ -73,7 +73,7 @@ async function signInWithPassword(email, password) {
 
 async function refreshToken(refreshToken) {
   const url =
-    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(sandboxApiKey)}`;
+    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(firebaseApiKey)}`;
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -94,14 +94,14 @@ async function refreshToken(refreshToken) {
 }
 
 async function readDbPath(path, idToken) {
-  const base = sandboxDbUrl.replace(/\/$/, '');
+  const base = backendBaseUrl.replace(/\/$/, '');
   const separator = path.startsWith('/') ? '' : '/';
   const url = `${base}${separator}${path}.json?auth=${encodeURIComponent(idToken)}`;
   return fetchJson(url);
 }
 
 async function putDbPath(path, idToken, body) {
-  const base = sandboxDbUrl.replace(/\/$/, '');
+  const base = backendBaseUrl.replace(/\/$/, '');
   const separator = path.startsWith('/') ? '' : '/';
   const url = `${base}${separator}${path}.json?auth=${encodeURIComponent(idToken)}`;
   return fetchJson(url, {
@@ -114,7 +114,7 @@ async function putDbPath(path, idToken, body) {
 }
 
 async function patchDbPath(path, idToken, body) {
-  const base = sandboxDbUrl.replace(/\/$/, '');
+  const base = backendBaseUrl.replace(/\/$/, '');
   const separator = path.startsWith('/') ? '' : '/';
   const url = `${base}${separator}${path}.json?auth=${encodeURIComponent(idToken)}`;
   return fetchJson(url, {
@@ -127,7 +127,7 @@ async function patchDbPath(path, idToken, body) {
 }
 
 async function postDbPath(path, idToken, body) {
-  const base = sandboxDbUrl.replace(/\/$/, '');
+  const base = backendBaseUrl.replace(/\/$/, '');
   const separator = path.startsWith('/') ? '' : '/';
   const url = `${base}${separator}${path}.json?auth=${encodeURIComponent(idToken)}`;
   return fetchJson(url, {
@@ -140,7 +140,7 @@ async function postDbPath(path, idToken, body) {
 }
 
 async function deleteDbPath(path, idToken) {
-  const base = sandboxDbUrl.replace(/\/$/, '');
+  const base = backendBaseUrl.replace(/\/$/, '');
   const separator = path.startsWith('/') ? '' : '/';
   const url = `${base}${separator}${path}.json?auth=${encodeURIComponent(idToken)}`;
   return fetchJson(url, {
@@ -239,8 +239,8 @@ test('live sandbox tests are env-gated', () => {
     return;
   }
 
-  assert.ok(sandboxApiKey);
-  assert.ok(sandboxDbUrl);
+  assert.ok(firebaseApiKey);
+  assert.ok(backendBaseUrl);
 });
 
 maybeLiveTest('firebase auth sign-up returns the expected token fields', async () => {

@@ -5,12 +5,15 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin as input, stderr as promptOutput } from 'node:process';
 
-const API_KEY = process.env.SETTLEUP_SANDBOX_API_KEY || 'AIzaSyCBsW4lveImpcB92c-cnNg2VQgx9JdijU8';
-const DB_URL = (process.env.SETTLEUP_SANDBOX_DB_URL || 'https://settle-up-sandbox.firebaseio.com').replace(/\/$/, '');
+loadDotEnv();
+
+const ENVIRONMENT = process.env.SETTLEUP_ENV || 'production';
+const API_BASE_URL = (process.env.SETTLEUP_API_BASE_URL || '').replace(/\/$/, '');
+const FIREBASE_API_KEY = process.env.SETTLEUP_FIREBASE_API_KEY || '';
 const CONFIG_DIR = process.env.SETTLEUP_CLI_CONFIG_DIR
   || path.join(os.homedir(), '.config', 'settleup-cli');
-const AUTH_PATH = path.join(CONFIG_DIR, 'auth.json');
-const META = { sandbox: true };
+const AUTH_PATH = path.join(CONFIG_DIR, ENVIRONMENT, 'auth.json');
+const META = { environment: ENVIRONMENT };
 const ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   'AUTH_INVALID',
@@ -25,6 +28,32 @@ const ERROR_CODES = new Set([
   'SERVER_TASK_FAILED',
 ]);
 
+function loadDotEnv() {
+  const envPath = path.join(process.cwd(), '.env');
+  let text;
+  try {
+    text = fs.readFileSync(envPath, 'utf8');
+  } catch {
+    return;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const separator = trimmed.indexOf('=');
+    if (separator === -1) continue;
+    const key = trimmed.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || Object.hasOwn(process.env, key)) continue;
+    let value = trimmed.slice(separator + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
 function printJson(value, exitCode = 0) {
   console.log(JSON.stringify(value, null, 2));
   process.exit(exitCode);
@@ -37,6 +66,33 @@ function ok(data = {}) {
 function fail(code, message, details = {}) {
   const stableCode = ERROR_CODES.has(code) ? code : 'API_REQUEST_FAILED';
   return { ok: false, error: { code: stableCode, message, details }, meta: META };
+}
+
+function requireApiBaseUrl() {
+  if (!API_BASE_URL) {
+    throw Object.assign(new Error('Missing SETTLEUP_API_BASE_URL; set it in the environment or local .env'), {
+      cliCode: 'INVALID_INPUT',
+      details: { variable: 'SETTLEUP_API_BASE_URL', environment: ENVIRONMENT },
+    });
+  }
+  return API_BASE_URL;
+}
+
+function apiUrl(apiPath) {
+  const base = requireApiBaseUrl();
+  const clean = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  return `${base}${clean}`;
+}
+
+function unwrapApiEnvelope(json) {
+  if (json?.ok === true && json.data && typeof json.data === 'object') return json.data;
+  if (json?.ok === false && json.error) {
+    throw Object.assign(new Error(json.error.message || 'API request failed'), {
+      cliCode: json.error.code || 'API_REQUEST_FAILED',
+      details: json.error.details || {},
+    });
+  }
+  return json;
 }
 
 function requireFlag(flags, name) {
@@ -72,7 +128,7 @@ function parseArgs(argv) {
 }
 
 function ensureConfigDir() {
-  fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.dirname(AUTH_PATH), { recursive: true, mode: 0o700 });
 }
 
 function readAuthFile() {
@@ -118,33 +174,80 @@ async function fetchJson(url, options = {}) {
   return json;
 }
 
-async function refreshAuth(auth) {
+async function fetchApiData(apiPath, options = {}) {
+  return unwrapApiEnvelope(await fetchJson(apiUrl(apiPath), options));
+}
+
+async function signInWithFirebase(email, password) {
+  const json = await fetchJson(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    }
+  );
+  return {
+    accessToken: json.idToken,
+    refreshToken: json.refreshToken,
+    uid: json.localId,
+    email: json.email || email,
+    expiresAt: Date.now() + (Number(json.expiresIn) * 1000),
+  };
+}
+
+async function refreshWithFirebase(refreshToken) {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
-    refresh_token: auth.refreshToken,
+    refresh_token: refreshToken,
   });
   const json = await fetchJson(
-    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(API_KEY)}`,
+    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
     }
   );
-  const next = {
-    ...auth,
-    idToken: json.id_token,
+  return {
+    accessToken: json.id_token,
     refreshToken: json.refresh_token,
     uid: json.user_id,
     expiresAt: Date.now() + (Number(json.expires_in) * 1000),
   };
+}
+
+async function refreshAuth(auth) {
+  const json = FIREBASE_API_KEY
+    ? await refreshWithFirebase(auth.refreshToken)
+    : await fetchApiData('/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: auth.refreshToken }),
+    });
+  const accessToken = json.accessToken || json.idToken;
+  const next = {
+    ...auth,
+    accessToken,
+    idToken: accessToken,
+    refreshToken: json.refreshToken || auth.refreshToken,
+    uid: json.uid || auth.uid,
+    email: json.email || auth.email,
+    expiresAt: json.expiresAt || Date.now() + (Number(json.expiresIn || json.expires_in) * 1000),
+  };
+  if (!next.accessToken || !next.refreshToken || !next.uid || !Number.isFinite(next.expiresAt)) {
+    throw Object.assign(new Error('Auth refresh response did not include a complete session'), {
+      cliCode: 'AUTH_REFRESH_FAILED',
+      details: { required: ['accessToken', 'refreshToken', 'uid', 'expiresAt'] },
+    });
+  }
   writeAuthFile(next);
   return next;
 }
 
 async function requireAuth() {
   const auth = readAuthFile();
-  if (!auth?.idToken || !auth?.refreshToken || !auth?.uid) {
+  if (!(auth?.accessToken || auth?.idToken) || !auth?.refreshToken || !auth?.uid) {
     throw Object.assign(new Error('Run `settleup auth login` first'), {
       cliCode: 'AUTH_REQUIRED',
       details: {},
@@ -165,16 +268,16 @@ async function requireAuth() {
 
 function dbUrl(dbPath, idToken) {
   const clean = dbPath.startsWith('/') ? dbPath : `/${dbPath}`;
-  return `${DB_URL}${clean}.json?auth=${encodeURIComponent(idToken)}`;
+  return `${requireApiBaseUrl()}${clean}.json?auth=${encodeURIComponent(idToken)}`;
 }
 
 async function dbGet(dbPath, auth) {
-  return fetchJson(dbUrl(dbPath, auth.idToken));
+  return fetchJson(dbUrl(dbPath, auth.accessToken || auth.idToken));
 }
 
 async function dbPut(dbPath, auth, body) {
   try {
-    return await fetchJson(dbUrl(dbPath, auth.idToken), {
+    return await fetchJson(dbUrl(dbPath, auth.accessToken || auth.idToken), {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -187,7 +290,7 @@ async function dbPut(dbPath, auth, body) {
 
 async function dbPatch(dbPath, auth, body) {
   try {
-    return await fetchJson(dbUrl(dbPath, auth.idToken), {
+    return await fetchJson(dbUrl(dbPath, auth.accessToken || auth.idToken), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -199,7 +302,7 @@ async function dbPatch(dbPath, auth, body) {
 }
 
 async function dbPost(dbPath, auth, body) {
-  return fetchJson(dbUrl(dbPath, auth.idToken), {
+  return fetchJson(dbUrl(dbPath, auth.accessToken || auth.idToken), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
@@ -207,7 +310,7 @@ async function dbPost(dbPath, auth, body) {
 }
 
 async function dbDelete(dbPath, auth) {
-  return fetchJson(dbUrl(dbPath, auth.idToken), { method: 'DELETE' });
+  return fetchJson(dbUrl(dbPath, auth.accessToken || auth.idToken), { method: 'DELETE' });
 }
 
 function readInput(inputFlag) {
@@ -413,7 +516,7 @@ function transactionIncludesMember(tx, memberId) {
 
 const HELP = {
   groups: {
-    auth: 'Authenticate and manage the local sandbox session.',
+    auth: 'Authenticate and manage the local session.',
     users: 'Read the authenticated Settle Up user profile.',
     groups: 'List, fetch, and create groups.',
     members: 'List, fetch, create, and patch group members.',
@@ -487,7 +590,7 @@ const HELP = {
       },
       create: {
         synopsis: 'settleup groups create --input -|<path>',
-        purpose: 'Create a group and first member using the sandbox permission-stub flow.',
+        purpose: 'Create a group and first member using the permission-stub flow.',
         operation: 'creates records',
         inputType: 'CreateGroupInput',
         schemaHelp: 'settleup schema groups.create',
@@ -811,21 +914,28 @@ async function main() {
     }
     assertNonEmptyString(email, 'email');
     assertNonEmptyString(password, 'password');
-    const json = await fetchJson(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(API_KEY)}`,
-      {
+    const json = FIREBASE_API_KEY
+      ? await signInWithFirebase(email, password)
+      : await fetchApiData('/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password, returnSecureToken: true }),
-      }
-    );
+        body: JSON.stringify({ email, password }),
+      });
+    const accessToken = json.accessToken || json.idToken;
     const auth = {
-      idToken: json.idToken,
+      accessToken,
+      idToken: accessToken,
       refreshToken: json.refreshToken,
-      uid: json.localId,
+      uid: json.uid || json.localId,
       email: json.email || email,
-      expiresAt: Date.now() + (Number(json.expiresIn) * 1000),
+      expiresAt: json.expiresAt || Date.now() + (Number(json.expiresIn) * 1000),
     };
+    if (!auth.accessToken || !auth.refreshToken || !auth.uid || !Number.isFinite(auth.expiresAt)) {
+      throw Object.assign(new Error('Auth response did not include a complete session'), {
+        cliCode: 'AUTH_INVALID',
+        details: { required: ['accessToken', 'refreshToken', 'uid', 'expiresAt'] },
+      });
+    }
     writeAuthFile(auth);
     await ensureUserRecord(auth);
     return printJson(ok({ uid: auth.uid, email: auth.email, expiresAt: auth.expiresAt }));
@@ -834,7 +944,7 @@ async function main() {
   if (group === 'auth' && command === 'status') {
     const auth = readAuthFile();
     return printJson(ok({
-      authenticated: Boolean(auth?.idToken && auth?.refreshToken),
+      authenticated: Boolean((auth?.accessToken || auth?.idToken) && auth?.refreshToken),
       uid: auth?.uid || null,
       email: auth?.email || null,
       expiresAt: auth?.expiresAt || null,

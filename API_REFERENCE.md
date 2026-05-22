@@ -1,34 +1,34 @@
 # API Reference
 
-This file documents the Firebase Auth and Settle Up sandbox database endpoints used by the `settleup` CLI. The CLI behavior and JSON contracts are defined in [CLI_SPEC.md](CLI_SPEC.md); this file explains the backend paths behind those commands.
+This file documents the auth wrapper and Settle Up backend paths used by the `settleup` CLI. The CLI behavior and JSON contracts are defined in [CLI_SPEC.md](CLI_SPEC.md); this file explains the backend paths behind those commands.
 
-## Sandbox Config
+## Config
 
-Defaults used by the CLI and live tests:
+Runtime config:
 
 ```text
-SETTLEUP_SANDBOX_API_KEY = public sandbox Firebase Web API key
-SETTLEUP_SANDBOX_DB_URL  = https://settle-up-sandbox.firebaseio.com
+SETTLEUP_ENV              = production | staging | test
+SETTLEUP_API_BASE_URL     = Settle Up API base URL
+SETTLEUP_FIREBASE_API_KEY = optional local/staging development Firebase Web API key
 ```
 
-Both can be overridden with environment variables.
+The open-source CLI does not ship a Firebase API key. Local development can provide one through `.env` when the configured auth wrapper requires it.
 
 ## Auth Endpoints
 
 | Purpose | Method | Endpoint |
 |---|---|---|
-| Create temporary live-test user | `POST` | `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=<API_KEY>` |
-| Login | `POST` | `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<API_KEY>` |
-| Refresh token | `POST` | `https://securetoken.googleapis.com/v1/token?key=<API_KEY>` |
+| Login | `POST` | `<SETTLEUP_API_BASE_URL>/auth/login` |
+| Refresh token | `POST` | `<SETTLEUP_API_BASE_URL>/auth/refresh` |
 
-The CLI stores `idToken`, `refreshToken`, `uid`, `email`, and `expiresAt` locally after login. Authenticated Realtime Database calls pass the current `idToken` as `?auth=<idToken>`.
+The auth wrapper handles Firebase auth. The CLI stores `accessToken`, `refreshToken`, `uid`, `email`, and `expiresAt` locally after login. Authenticated backend calls pass the current access token as `?auth=<accessToken>`.
 
-## Database Paths
+## Backend Paths
 
-All database paths are under:
+Backend paths are under:
 
 ```text
-https://settle-up-sandbox.firebaseio.com/<path>.json?auth=<idToken>
+<SETTLEUP_API_BASE_URL>/<path>.json?auth=<accessToken>
 ```
 
 | Path | Used for |
@@ -53,7 +53,7 @@ https://settle-up-sandbox.firebaseio.com/<path>.json?auth=<idToken>
 
 | CLI command | Backend calls |
 |---|---|
-| `auth login` | `POST accounts:signInWithPassword`; then ensures `/users/<uid>` exists. |
+| `auth login` | `POST /auth/login`; then ensures `/users/<uid>` exists. |
 | `auth status` | Local auth file only. |
 | `auth logout` | Local auth file only. |
 | `users me` | `GET /users/<uid>`. |
@@ -78,7 +78,7 @@ https://settle-up-sandbox.firebaseio.com/<path>.json?auth=<idToken>
 
 ## Group Creation Notes
 
-In the public sandbox, `POST /groups` has been verified to return `401 Permission denied` for fresh REST-created users, because permissions cannot be pre-created for the generated group id.
+`POST /groups` is not used because permissions must exist before group metadata is writable.
 
 The CLI therefore uses a client-generated `groupId` and this order:
 
@@ -89,7 +89,7 @@ The CLI therefore uses a client-generated `groupId` and this order:
 5. `PUT /userGroups/<uid>/<groupId>`
 6. `PUT /users/<uid>/currentTabId`
 
-This is the same flow covered by the live sandbox tests.
+This is the same flow covered by the integration tests.
 
 ## Debt And Settlement Notes
 
@@ -115,9 +115,8 @@ Debt settlement is represented as a `transfer` transaction:
 
 The CLI does not mutate `/debts/<groupId>` directly.
 
-## Sandbox Quirks
+## Backend Notes
 
-- Firebase Auth signup does not create `/users/<uid>` automatically; the CLI and live tests create the app-level user profile explicitly.
+- Auth login does not necessarily create `/users/<uid>` automatically; the CLI ensures the app-level user profile exists.
 - Group-owned writes require a permission entry before most group paths are writable.
-- In the public sandbox, `POST /groups` has been verified to return `401 Permission denied` for fresh REST-created users.
 - Debt recalculation is a server task, so the live integration also performs a local deterministic debt check from transactions for immediate verification.

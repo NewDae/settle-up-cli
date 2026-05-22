@@ -2,7 +2,7 @@
 
 ## Goal
 
-Provide a deterministic, JSON-only CLI for agent use against the Settle Up sandbox API.
+Provide a deterministic, JSON-only CLI for agent use against the configured Settle Up API.
 
 Design constraints:
 
@@ -19,7 +19,7 @@ Design constraints:
 - No human-first pretty output by default
 - No natural-language command inputs
 - No internal "smart" matching of group names or member names
-- No bundled sandbox credentials or session tokens
+- No bundled credentials or session tokens
 - No reporting layer like `reports spend` or `reports share`
 
 ---
@@ -32,6 +32,7 @@ Design constraints:
 - Read commands use flags
 - Write commands use exact IDs plus JSON input
 - Mutating commands never accept fuzzy names
+- Mutating commands only affect provided fields; omitted fields remain unchanged
 - Errors are structured and stable
 - Amounts and weights are strings, not floats
 
@@ -70,28 +71,41 @@ Rules:
 ### What the CLI ships with
 
 - code
-- sandbox Firebase `apiKey`
-- sandbox Settle Up `databaseUrl`
+- command schemas and validation
+- production/staging API URL configuration through environment or `.env`
 
 ### What the CLI must not ship with
 
+- Firebase API keys for production
 - any `idToken`
 - any `refreshToken`
 - any user password
 
 ### Token flow
 
+Hosted user flow:
+
 1. user runs `auth login`
-2. CLI signs in via Firebase Auth REST API using bundled sandbox config
-3. CLI stores `idToken`, `refreshToken`, `uid`, `expiresAt` locally
-4. CLI refreshes token automatically before authenticated commands
+2. CLI calls `<SETTLEUP_API_BASE_URL>/auth/login`
+3. auth wrapper handles Firebase auth
+4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
+5. CLI refreshes token through `<SETTLEUP_API_BASE_URL>/auth/refresh` before authenticated commands
+
+Local/staging development flow:
+
+1. contributor sets `SETTLEUP_FIREBASE_API_KEY` in `.env` or shell env
+2. user runs `auth login`
+3. CLI signs in directly with Firebase Auth using the local development key
+4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
+5. CLI refreshes directly with Firebase Auth before authenticated commands
+6. backend commands still use `<SETTLEUP_API_BASE_URL>` with the stored access token
 
 ### Security boundary
 
-- `apiKey` alone is not enough to read or write database data
-- `apiKey` can still be used to hit Firebase Auth endpoints for that project
-- real session secrets are `refreshToken` and `idToken`
-- this CLI assumes shipping sandbox project config is acceptable
+- Firebase API keys are not committed to the open-source CLI
+- local/staging development can provide `SETTLEUP_FIREBASE_API_KEY` through `.env`
+- real session secrets are `refreshToken` and `accessToken`
+- hosted auth wrapping is handled by the configured Settle Up API
 
 ### Local storage
 
@@ -105,7 +119,7 @@ Fallback:
 
 Suggested paths:
 
-- `~/.config/settleup-cli/auth.json`
+- `~/.config/settleup-cli/<environment>/auth.json`
 
 ---
 
@@ -118,7 +132,7 @@ Suggested paths:
   "ok": true,
   "data": {},
   "meta": {
-    "sandbox": true
+    "environment": "staging"
   }
 }
 ```
@@ -134,7 +148,7 @@ Suggested paths:
     "details": {}
   },
   "meta": {
-    "sandbox": true
+    "environment": "staging"
   }
 }
 ```
@@ -282,7 +296,7 @@ Writes:
 
 Sandbox note:
 
-- `POST /groups` has been verified to return `401 Permission denied` in the public sandbox for fresh REST-created users, because permissions must exist before group metadata is writable.
+- `POST /groups` is not used because permissions must exist before group metadata is writable.
 - Creating `/permissions/<groupId>/<uid>` creates a minimal group stub with invite metadata.
 - The CLI should patch that stub with `CreateGroupInput` group fields, then create the creator's member and user-group link.
 
@@ -924,7 +938,7 @@ Rules:
 
 ## API Mapping
 
-Detailed endpoint behavior, command-to-path mapping, and sandbox quirks are documented in [API_REFERENCE.md](API_REFERENCE.md). This section is the short summary.
+Detailed endpoint behavior and command-to-path mapping are documented in [API_REFERENCE.md](API_REFERENCE.md). This section is the short summary.
 
 ### Firebase Auth
 
@@ -933,7 +947,7 @@ Detailed endpoint behavior, command-to-path mapping, and sandbox quirks are docu
 - refresh token:
   - `POST https://securetoken.googleapis.com/v1/token?key=<API_KEY>`
 
-### Settle Up sandbox database
+### Settle Up backend paths
 
 - `/users/<uid>`
 - `/userGroups/<uid>`
@@ -1025,9 +1039,9 @@ Risk:
 
 Mitigation:
 
-- test all write flows in sandbox first
+- test all write flows in staging first
 - keep CLI behavior thin and observable
-- avoid adding abstractions until sandbox behavior is verified
+- avoid adding abstractions until staging behavior is verified
 
 ### 7. Debts are derived state
 
@@ -1077,4 +1091,4 @@ Residual risk:
 
 Keep this CLI small, explicit, and boring.
 
-The main mistake to avoid is moving agent reasoning into the CLI. The CLI should be a deterministic transport and validation layer over Settle Up sandbox, not a policy engine.
+The main mistake to avoid is moving agent reasoning into the CLI. The CLI should be a deterministic transport and validation layer over Settle Up, not a policy engine.

@@ -1,11 +1,11 @@
 # settleup CLI
 
-Deterministic JSON-only CLI for exercising the Settle Up sandbox API. The installed command is `settleup`.
+Deterministic JSON-only CLI for Settle Up. The installed command is `settleup`.
 
 ## What This CLI Does
 
-- Authenticates a sandbox Firebase user and stores a local session.
-- Creates groups using the sandbox-safe permission-stub flow.
+- Authenticates through the Settle Up auth wrapper and stores a local session.
+- Creates groups using the Settle Up permission-stub flow.
 - Manages members, categories, expenses, transfers, transactions, debts, and changes.
 - Lists and filters transactions by member, payer, category, type, date, limit, and order.
 - Triggers backend debt recalculation tasks.
@@ -23,10 +23,12 @@ Deterministic JSON-only CLI for exercising the Settle Up sandbox API. The instal
 ## Requirements
 
 - Node.js 18 or newer.
-- Network access to Firebase Auth and the Settle Up sandbox API for live CLI usage.
+- Network access to the configured Settle Up API for live CLI usage.
 - No npm package install is required; the CLI uses built-in Node APIs only.
 
 ## Install And Run
+
+This path gets the CLI up and running from a local checkout.
 
 Clone the repo:
 
@@ -48,11 +50,45 @@ npm link
 settleup --help
 ```
 
+## Local Dev And Testing Config
+
+For local development, use `.env` for day-to-day CLI commands:
+
+```bash
+cp .env.example .env
+```
+
+For E2E runs, keep staging and production config separate:
+
+```bash
+cp .env.staging.example .env.staging
+cp .env.production.example .env.production
+```
+
+Example staging config:
+
+```bash
+SETTLEUP_ENV=staging
+SETTLEUP_API_BASE_URL=https://<staging-settle-up-api>
+SETTLEUP_FIREBASE_API_KEY=<staging-firebase-api-key>
+```
+
+`SETTLEUP_FIREBASE_API_KEY` is only for local/staging development. Normal users do not need Firebase keys, a local Worker, or a local backend.
+
+Run E2E against a specific environment:
+
+```bash
+npm run integration:e2e:staging
+npm run integration:e2e:prod
+```
+
+Real shell environment variables override env-file values.
+
 ## Main Commands
 
 | Command | What it does |
 |---|---|
-| `settleup auth login` | Signs in to the sandbox and stores a local session. |
+| `settleup auth login` | Signs in through `<SETTLEUP_API_BASE_URL>/auth/login` and stores a local session. |
 | `settleup auth status` | Shows whether a local session exists. |
 | `settleup users me` | Reads the current app-level user profile. |
 | `settleup groups list` | Lists groups visible to the logged-in user. |
@@ -79,20 +115,6 @@ settleup schema expenses.create
 settleup schema transactions.update
 ```
 
-## Group Creation Flow
-
-`settleup groups create` is one command, but it performs the full sandbox-safe flow:
-
-1. Generates a client-side `groupId`.
-2. Writes `/permissions/<groupId>/<uid>`.
-3. Reads the generated group stub.
-4. Patches `/groups/<groupId>` with metadata.
-5. Creates the first member from `firstMember`.
-6. Links `/userGroups/<uid>/<groupId>` to that member.
-7. Sets `/users/<uid>/currentTabId`.
-
-This means the logged-in user is automatically added to the group as the first member.
-
 ## Spec Alignment
 
 Implemented from [CLI_SPEC.md](CLI_SPEC.md):
@@ -110,7 +132,7 @@ Backend endpoint details are documented in [API_REFERENCE.md](API_REFERENCE.md).
 Known implementation notes:
 
 - `auth login` supports piped stdin in non-TTY runs so the integration test can automate login. Interactive login still works normally.
-- Tokens are stored in the config-directory fallback path, not OS keychain.
+- Tokens are stored per `SETTLEUP_ENV` in the config-directory fallback path, not OS keychain.
 - Debt settlement is represented by creating `transfer` transactions, aligned with the CLI spec.
 
 ## Tests
@@ -123,10 +145,10 @@ Offline contract tests:
 npm test
 ```
 
-Live sandbox smoke tests:
+Live staging smoke tests:
 
 ```bash
-SETTLEUP_RUN_LIVE=1 node --test test/sandbox-live.test.mjs
+SETTLEUP_ENV=staging npm run integration:e2e
 ```
 
 Reusable CLI end-to-end integration:
@@ -135,7 +157,7 @@ Reusable CLI end-to-end integration:
 npm run integration:e2e
 ```
 
-The integration run creates a fresh sandbox user and group, then covers login, member creation, categories, expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, final debt checks, changes, and logout.
+The integration run uses the configured staging API, then covers login, member creation, categories, expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, final debt checks, changes, and logout.
 
 Each run writes a dated markdown report:
 
@@ -150,8 +172,8 @@ The report includes the input command, JSON output, and a one-line pass check fo
 ```text
 bin/settleup.mjs                  CLI executable
 scripts/run-cli-integration.mjs   Reusable live E2E runner
-test/                             Contract and sandbox tests
+test/                             Contract and staging tests
 CLI_SPEC.md                       CLI contract and API mapping
-API_REFERENCE.md                  Backend endpoints and sandbox path mapping
+API_REFERENCE.md                  Backend endpoints and path mapping
 Tests.md                          Test coverage notes and commands
 ```

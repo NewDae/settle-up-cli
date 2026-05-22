@@ -1,5 +1,10 @@
 node_modules/
 .DS_Store
+.env
+.env.*
+!.env.example
+!.env.staging.example
+!.env.production.example
 
 # Local CLI sessions and generated live-run reports
 .settleup-cli/

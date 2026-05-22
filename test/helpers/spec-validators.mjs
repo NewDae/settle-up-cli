@@ -29,7 +29,8 @@ export function isTimezoneOffset(value) {
 export function assertSuccessEnvelopeShape(assert, envelope) {
   assert.equal(envelope.ok, true);
   assert.ok(isObject(envelope.data));
-  assert.deepEqual(envelope.meta, { sandbox: true });
+  assert.ok(isObject(envelope.meta));
+  assert.equal(typeof envelope.meta.environment, 'string');
 }
 
 export function assertErrorEnvelopeShape(assert, envelope, allowedCodes) {
@@ -38,7 +39,8 @@ export function assertErrorEnvelopeShape(assert, envelope, allowedCodes) {
   assert.ok(allowedCodes.includes(envelope.error.code));
   assert.equal(typeof envelope.error.message, 'string');
   assert.ok(isObject(envelope.error.details));
-  assert.deepEqual(envelope.meta, { sandbox: true });
+  assert.ok(isObject(envelope.meta));
+  assert.equal(typeof envelope.meta.environment, 'string');
 }
 
 export function assertWeightedMemberRef(assert, ref) {

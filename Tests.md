@@ -5,18 +5,18 @@ This project tests the CLI in three layers:
 | Layer | Command | Purpose |
 |---|---|---|
 | Local deterministic suite | `npm test` | Fast, no-network checks for CLI output, JSON contracts, and invalid inputs. |
-| Live sandbox suite | `npm run test:live` | Verifies the documented Firebase and Settle Up sandbox behavior against real APIs. |
-| CLI end-to-end workflow | `npm run integration:e2e` | Exercises the actual CLI through a full sandbox user journey and writes a report. |
+| Live backend suite | `npm run test:live` | Verifies configured staging backend behavior against real APIs. |
+| CLI end-to-end workflow | `npm run integration:e2e` | Exercises the actual CLI through a full staging user journey and writes a report. |
 
-The default test command is intentionally quiet. It excludes helper modules and live sandbox tests so ordinary local runs do not show skipped network tests or fail because an external service is unavailable.
+The default test command is intentionally quiet. It excludes helper modules and live backend tests so ordinary local runs do not show skipped network tests or fail because an external service is unavailable.
 
 ## Principles
 
 - Test the public CLI contract: JSON envelopes, stable error codes, required identifiers, and schema examples.
 - Keep `uid` and `memberId` separate everywhere. Auth uses `uid`; group ledger operations use `memberId`.
-- Reject common bad agent inputs early, before writes reach the sandbox.
-- Keep live tests explicit because they depend on network access and sandbox availability.
-- Avoid assertions on incidental sandbox behavior unless the CLI depends on it.
+- Reject common bad agent inputs early, before writes reach the backend.
+- Keep live tests explicit because they depend on network access and staging availability.
+- Avoid assertions on incidental backend behavior unless the CLI depends on it.
 
 ## Local Deterministic Suite
 
@@ -38,7 +38,7 @@ What it covers:
 | Area | Coverage |
 |---|---|
 | CLI executable behavior | Help, schema output, auth status without a session, auth-required errors, and unknown-command errors. |
-| JSON envelopes | Success and error responses keep the documented `ok`, `data` or `error`, and `meta.sandbox` shape. |
+| JSON envelopes | Success and error responses keep the documented `ok`, `data` or `error`, and `meta.environment` shape. |
 | Error codes | The allowed error code list remains stable. |
 | Identity model | Fixtures and nested transaction references do not mix `uid` and `memberId`. |
 | Primitive formats | Amounts and weights are decimal strings; currency codes are `A-Z{3}`; dates are epoch millis; timezones are offsets. |
@@ -49,7 +49,7 @@ What it covers:
 
 Most contract logic lives in [test/helpers/spec-validators.mjs](test/helpers/spec-validators.mjs), with reusable fixtures in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). These helpers are not run as standalone tests in the default command.
 
-## Live Sandbox Suite
+## Live Backend Suite
 
 Run:
 
@@ -57,13 +57,13 @@ Run:
 npm run test:live
 ```
 
-This sets `SETTLEUP_RUN_LIVE=1` and runs [test/sandbox-live.test.mjs](test/sandbox-live.test.mjs).
+This sets `SETTLEUP_RUN_LIVE=1` and runs [test/sandbox-live.test.mjs](test/sandbox-live.test.mjs). These legacy live tests still target Firebase-style backend paths and should be run only with explicit staging config.
 
 What it covers:
 
 | Area | Coverage |
 |---|---|
-| Firebase Auth | Temporary user signup, signin, and token refresh. |
+| Auth | Temporary user signup, signin, and token refresh where supported by staging. |
 | User provisioning | The test creates `/users/<uid>` because Firebase signup does not create the database profile automatically. |
 | Authenticated reads | `/users/<uid>` and `/userGroups/<uid>` are reachable with the returned `idToken`. |
 | Permission-first writes | Group-owned writes work after creating `/permissions/<groupId>/<uid>`. |
@@ -72,13 +72,14 @@ What it covers:
 | Transactions | Create, list, patch, fetch, and delete expense and transfer transactions. |
 | Debts and changes | Read derived debts and group changes after seeding a transaction. |
 | Server tasks | Post `{ request: { groupId } }` to `/serverTasks/calculateDebts`. |
-| Auto-ID group create | Documents that `POST /groups` has been verified to return `401 Permission denied` for fresh REST-created sandbox users because permissions cannot be pre-created for a generated id. |
+| Auto-ID group create | Documents why the CLI avoids `POST /groups`: permissions cannot be pre-created for a generated id. |
 
-Optional sandbox overrides:
+Required staging overrides:
 
 ```bash
-export SETTLEUP_SANDBOX_API_KEY="..."
-export SETTLEUP_SANDBOX_DB_URL="https://<sandbox-db>.firebaseio.com"
+export SETTLEUP_ENV=staging
+export SETTLEUP_API_BASE_URL="https://<staging-settle-up-api>"
+export SETTLEUP_FIREBASE_API_KEY="..."
 ```
 
 ## Full File Run
@@ -89,7 +90,7 @@ Run:
 npm run test:all
 ```
 
-This runs every `test/*.test.mjs` file. Without `SETTLEUP_RUN_LIVE=1`, the live sandbox cases appear as skipped tests. Use this when you want to confirm all test files load, not as the normal local feedback loop.
+This runs every `test/*.test.mjs` file. Without `SETTLEUP_RUN_LIVE=1`, the live backend cases appear as skipped tests. Use this when you want to confirm all test files load, not as the normal local feedback loop.
 
 ## End-to-End CLI Workflow
 
@@ -99,7 +100,7 @@ Run:
 npm run integration:e2e
 ```
 
-This creates a fresh sandbox user, logs in through the CLI, creates a group and members, exercises expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, changes, and logout.
+This uses the configured staging API, logs in through the CLI, creates a group and members, exercises expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, changes, and logout.
 
 Each run writes a dated report to:
 
@@ -109,13 +110,13 @@ integration-reports/cli-integration-<date>.md
 
 The report includes each command, its JSON output, and a one-line pass check.
 
-## Sandbox Assumptions
+## Staging Assumptions
 
-- The suite uses the sandbox URL and Web API key published in the official Settle Up API docs by default.
-- The docs do not publish a reusable sandbox email/password, so live tests create a temporary Firebase email/password user.
-- As clarified by the API owner on 2026-05-04, Firebase Auth signup does not populate `/users/<uid>` in the database.
+- The suite uses `SETTLEUP_API_BASE_URL` and local `.env`/shell config.
+- The CLI does not commit Firebase API keys.
+- Auth login goes through `<SETTLEUP_API_BASE_URL>/auth/login`.
 - Group-owned writes need a permission record first. The stable create flow is permission write, `PATCH /groups/<groupId>`, member create, and `/userGroups/<uid>/<groupId>` link.
-- As verified on 2026-05-04, `POST /groups` does not expose a way to pre-create permissions for the generated id, so the CLI uses a client-generated group id.
+- The CLI uses a client-generated group id so permissions can be created before group metadata is patched.
 
 ## Reference Docs
 

@@ -16,7 +16,7 @@ export const successEnvelope = {
   ok: true,
   data: {},
   meta: {
-    sandbox: true,
+    environment: 'test',
   },
 };
 
@@ -28,7 +28,7 @@ export const errorEnvelope = {
     details: {},
   },
   meta: {
-    sandbox: true,
+    environment: 'test',
   },
 };
 
