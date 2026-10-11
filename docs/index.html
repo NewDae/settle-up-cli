@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f6f2">
+  <meta name="description" content="An open-source Settle Up CLI for people and AI agents. Manage groups, shared expenses, transfers and debts from your terminal. Install from npm.">
+  <meta property="og:title" content="Settle Up CLI — shared expenses, from your terminal">
+  <meta property="og:description" content="One small, open-source CLI for people and AI agents. Install from npm. JSON output. No API keys to configure.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://newdae.github.io/settle-up-cli/">
+  <link rel="canonical" href="https://newdae.github.io/settle-up-cli/">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="alternate" type="text/plain" href="./llms.txt" title="Agent instructions">
+  <script src="./main.js" defer></script>
+  <title>Settle Up CLI — shared expenses, from your terminal</title>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="page">
+    <header>
+      <a class="wordmark" href="./" aria-label="Settle Up CLI home"><span class="mark" aria-hidden="true">↗</span> settleup<span class="cli">/ cli</span></a>
+      <nav aria-label="Main navigation">
+        <a href="#agents">For agents</a>
+        <a href="https://github.com/NewDae/settle-up-cli">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow"><span class="dot" aria-hidden="true"></span> OPEN SOURCE · MIT LICENSE</p>
+        <h1 id="hero-title">Settle Up.<br><span>From your terminal.</span></h1>
+        <p class="intro">Groups, shared expenses, transfers and debts.<br class="desktop-break"> One small CLI for people and AI agents.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/NewDae/settle-up-cli"><span aria-hidden="true">☆</span> Star on GitHub <span aria-hidden="true">↗</span></a>
+          <a class="text-link" href="https://www.npmjs.com/package/settle-up-cli">View on npm <span aria-hidden="true">↗</span></a>
+        </div>
+      </section>
+      <section class="start" aria-labelledby="start-title">
+        <div class="section-title"><h2 id="start-title">Three commands. You're in.</h2><span class="meta">Node.js 22+</span></div>
+        <div class="terminal">
+          <div class="terminal-top"><span><span class="terminal-dot" aria-hidden="true"></span> terminal</span><button type="button" id="copy-install">Copy install command</button></div>
+          <pre aria-label="Install, sign in and list your groups"><code><span class="comment"># Install</span>
+<span class="prompt">$</span> npm install -g settle-up-cli
+
+<span class="comment"># Sign in with your Settle Up account</span>
+<span class="prompt">$</span> settleup auth login
+
+<span class="comment"># See your groups</span>
+<span class="prompt">$</span> settleup groups list</code></pre>
+        </div>
+        <p class="caption">Production endpoints included. No API keys or backend setup.</p>
+        <p id="copy-status" class="copy-status" role="status" aria-live="polite"></p>
+        <aside class="login-note" aria-label="Account sign-in information"><span class="note-symbol" aria-hidden="true">↳</span><p><strong>Use Google, Apple, or another sign-in method?</strong><br>This CLI uses email/password. <a href="https://settleup.app/migrate-account">Migrate your account to email/password <span aria-hidden="true">↗</span></a> before signing in.</p></aside>
+      </section>
+      <section class="agents" id="agents" aria-labelledby="agents-title">
+        <div><p class="eyebrow">FOR AI AGENTS</p><h2 id="agents-title">A CLI your agent<br>can work with.</h2><p>Structured JSON output. Explicit IDs for writes. Built-in schemas for every write payload.</p><p>Sign in yourself in your terminal, then let your shell-capable agent use the CLI. Keep passwords and tokens out of the conversation.</p><a class="text-link" href="https://github.com/NewDae/settle-up-cli/blob/main/AGENT_GUIDE.md">Read the agent guide <span aria-hidden="true">↗</span></a><a class="agent-file" href="./llms.txt">Plain-text agent instructions ↗</a></div>
+        <div class="agent-code"><span class="code-label">DISCOVER → READ → WRITE</span><pre><code>settleup --help
+settleup groups list
+settleup schema expenses.create
+
+<span class="comment"># Use exact IDs and a reviewed JSON payload</span>
+settleup expenses create \
+  --group-id &lt;groupId&gt; \
+  --input expense.json</code></pre><p>Look up IDs first. Only make changes the user has authorized.</p></div>
+      </section>
+      <section class="open-source" aria-labelledby="source-title"><div><h2 id="source-title">Small tool. Open source.</h2><p>Explore the code, report an issue, or make it better.<br>If it's useful, a star helps others find it.</p></div><a class="button secondary" href="https://github.com/NewDae/settle-up-cli">☆ Star the repository <span aria-hidden="true">↗</span></a></section>
+    </main>
+    <footer><p>An independent community integration for <a href="https://settleup.app/">Settle Up</a>.</p><div><a href="https://github.com/NewDae/settle-up-cli/blob/main/LICENSE">MIT license</a><span aria-hidden="true">·</span><a href="https://github.com/NewDae/settle-up-cli/issues">Issues</a></div></footer>
+  </div>
+</body>
+</html>
