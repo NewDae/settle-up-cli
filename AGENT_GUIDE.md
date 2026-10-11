@@ -44,7 +44,7 @@ Example payload delivery after selecting the correct group and reviewing the exp
 settleup expenses create --group-id <groupId> --input expense.json
 ```
 
-This CLI is a shell tool, not an MCP server. Use a shell-capable agent with the user's authenticated local CLI. See [CLI_SPEC.md](CLI_SPEC.md) for the command contract and [API_REFERENCE.md](API_REFERENCE.md) for backend details.
+This CLI is a shell tool, not an MCP server. Use a shell-capable agent with the user's authenticated local CLI. For source and developer documentation, visit [GitHub](https://github.com/NewDae/settle-up-cli).
 
 ## Errors and sessions
 

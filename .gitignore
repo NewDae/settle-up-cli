@@ -16,3 +16,6 @@ index.html
 styles.css
 !docs/index.html
 !docs/styles.css
+
+# Local Cloudflare deployment state
+.wrangler/

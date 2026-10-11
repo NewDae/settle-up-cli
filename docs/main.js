@@ -1,6 +1,6 @@
 const panels = { human: document.getElementById('human-view'), machine: document.getElementById('machine-view') };
 const radios = [...document.querySelectorAll('input[name="audience"]')];
-const guideUrl = new URL('./agent.md', document.querySelector('link[rel=canonical]').href).href;
+const guideUrl = 'https://settleupcli.pages.dev/agent.md';
 function agentPrompt(agent) {
   const greeting = agent ? `Hi ${agent}, ` : '';
   return `${greeting}help me connect my Settle Up account so you can help with shared expenses and balances. Read ${guideUrl} and follow the setup guide. Check whether you have the tools to run the CLI, then help me sign in privately on the same computer where it runs. This CLI uses email/password; if I need to migrate, direct me to https://settleup.app/migrate-account. Never ask for my password or tokens in chat. Once connected, show me my groups. Make no changes to expenses or groups until I ask.`;
@@ -24,6 +24,7 @@ for (const button of document.querySelectorAll('.copy-prompt')) {
   const original = button.innerHTML;
   button.addEventListener('click', async () => {
     const prompt = agentPrompt(button.dataset.agent);
+    document.getElementById('prompt-preview-text').textContent = prompt;
     const status = document.getElementById('copy-status');
     try {
       await navigator.clipboard.writeText(prompt);
