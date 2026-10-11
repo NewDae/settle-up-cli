@@ -64,10 +64,15 @@ npm run docs:check
 | Path | Responsibility |
 |---|---|
 | `bin/settleup.mjs` | CLI executable, validation, help, and schema examples. |
+| `bin/lib/session-store.mjs` | Session storage in the OS credential store or explicit file. |
 | `test/` | Public CLI tests and opt-in live backend tests. |
 | `scripts/run-cli-integration.mjs` | Live CLI workflow and dated reports. |
 | `scripts/sync-agent-docs.mjs` | Generate/check site copies of the agent guide. |
-| `README.md` | User installation, everyday usage, and documentation entry point. |
+| `scripts/test-credential-store.mjs` | Native credential-store lifecycle check. |
+| `.github/workflows/ci.yml` | CI on macOS, Windows, and Linux. |
+| `README.md` | User installation, everyday usage, and documentation entry point (shown on npm). |
+| `.github/README.md` | Project overview, design principles, architecture, and contributor guide (shown on GitHub). |
+| `CHANGELOG.md` | Release notes. |
 | `CLI_SPEC.md` | Maintained requirements, principles, input contracts, and design evolution. |
 | `API_REFERENCE.md` | Backend paths and command-to-endpoint mapping. |
 | `LOGIN.md` | Authentication, configuration, and session storage. |
