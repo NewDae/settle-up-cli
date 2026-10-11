@@ -140,11 +140,11 @@ Group-owned writes depend on permission-first creation; the exact mapping and st
 
 ## Credential storage
 
-`test/cli-credential-storage.test.mjs` runs the real CLI across processes with mocked native storage and strictly offline HTTP responses. It covers login, refresh, logout, store failures and error redaction, verified legacy migration, explicit file storage and Unix permissions, and session isolation by environment, directory, and backend.
+`test/cli-credential-storage.test.mjs` runs the real CLI across processes with mocked native storage and strictly offline HTTP responses. It covers login, refresh, logout, store failures and error redaction, verified legacy migration, corrupt sessions reading as signed out, explicit file storage and Unix permissions (including leaving an existing config directory unchanged), the Windows Credential Manager size limit, and session isolation by environment, directory, and backend.
 
 `npm run test:credentials` exercises the real native OS store using uniquely scoped dummy sessions and mocked HTTP. It never reads the user's normal session or contacts a backend. The dummy credential is deleted after testing. This verifies the CLI integration, not every desktop permission prompt or a security audit of the dependency.
 
-GitHub Actions runs the offline suite and native tests on macOS, Windows, and Linux. Linux starts GNOME Keyring within a D-Bus session, and also tests an unavailable service. To reproduce Linux locally:
+GitHub Actions (`.github/workflows/ci.yml`) runs the offline suite, `docs:check`, and native tests on macOS, Windows, and Linux. Linux starts GNOME Keyring within a D-Bus session, and also tests an unavailable service. To reproduce Linux locally:
 
 ```bash
 docker build -f test/docker/Dockerfile -t settleup-credential-test .
