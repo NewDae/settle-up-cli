@@ -3,7 +3,12 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
 // Keep OS integration behind this adapter; the CLI never handles encryption keys.
-export function createSessionStore({ configDir, environment, apiBaseUrl, authBaseUrl, storage = 'keyring' }) {
+// CRED_MAX_CREDENTIAL_BLOB_SIZE: Windows rejects larger generic credentials.
+const WINDOWS_SECRET_LIMIT = 2560;
+
+export function createSessionStore({
+  configDir, environment, apiBaseUrl, authBaseUrl, storage = 'keyring', platform = process.platform,
+}) {
   const scope = createHash('sha256').update(JSON.stringify([
     path.resolve(configDir), environment, apiBaseUrl, authBaseUrl,
   ])).digest('hex');
@@ -20,15 +25,15 @@ export function createSessionStore({ configDir, environment, apiBaseUrl, authBas
     }
   }
 
-  function failure(operation) {
+  function failure(operation, help) {
     // Native errors can contain secret values. Never forward them to CLI output.
     return Object.assign(new Error(`Could not ${operation} the ${storage === 'keyring' ? 'OS credential store' : 'session file'}`), {
       cliCode: 'AUTH_STORAGE_FAILED',
       details: {
         storage, operation,
-        help: storage === 'keyring'
+        help: help || (storage === 'keyring'
           ? 'Unlock or enable your OS credential store (Secret Service on Linux), then retry. For an intentional plaintext session, set SETTLEUP_AUTH_STORAGE=file and sign in again. No automatic fallback was used.'
-          : 'Check access to SETTLEUP_CLI_CONFIG_DIR. File storage is plaintext and must be accessible only to your user account.',
+          : 'Check access to SETTLEUP_CLI_CONFIG_DIR. File storage is plaintext and must be accessible only to your user account.'),
       },
     });
   }
@@ -44,6 +49,11 @@ export function createSessionStore({ configDir, environment, apiBaseUrl, authBas
       accessToken, refreshToken: value.refreshToken, uid: value.uid,
       ...(typeof value.email === 'string' ? { email: value.email } : {}), expiresAt: value.expiresAt,
     };
+  }
+
+  // An unreadable session is treated as signed out; the next login replaces it.
+  function parseSession(text) {
+    try { return session(JSON.parse(text)); } catch { return null; }
   }
 
   function readFile(filename) {
@@ -69,10 +79,9 @@ export function createSessionStore({ configDir, environment, apiBaseUrl, authBas
 
   function saveFile(text) {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-    if (process.platform !== 'win32') {
-      fs.chmodSync(configDir, 0o700);
-      fs.chmodSync(directory, 0o700);
-    }
+    // Restrict only the CLI's environment directory; SETTLEUP_CLI_CONFIG_DIR
+    // may be a directory the user shares with other files.
+    if (process.platform !== 'win32') fs.chmodSync(directory, 0o700);
     // Write atomically so interruption cannot truncate a working session.
     const temporary = `${filePath}.${randomUUID()}.tmp`;
     try {
@@ -94,14 +103,19 @@ export function createSessionStore({ configDir, environment, apiBaseUrl, authBas
 
   async function saveVerified(auth) {
     const text = JSON.stringify(session(auth));
+    const bytes = Buffer.from(text, 'utf8');
     if (storage === 'file') saveFile(text);
-    else await (await keyring()).setSecret(Buffer.from(text, 'utf8'));
+    else if (platform === 'win32' && bytes.length > WINDOWS_SECRET_LIMIT) {
+      throw Object.assign(new Error('Session too large'), {
+        storageHelp: `This session is ${bytes.length} bytes; Windows Credential Manager stores at most ${WINDOWS_SECRET_LIMIT}. Set SETTLEUP_AUTH_STORAGE=file and sign in again.`,
+      });
+    } else await (await keyring()).setSecret(bytes);
     if (await rawRead() !== text) throw new Error('Session could not be verified');
   }
 
   async function guarded(operation, work) {
     validateStorage();
-    try { return await work(); } catch { throw failure(operation); }
+    try { return await work(); } catch (error) { throw failure(operation, error.storageHelp); }
   }
 
   return {
@@ -111,20 +125,22 @@ export function createSessionStore({ configDir, environment, apiBaseUrl, authBas
     read: () => guarded('read', async () => {
       const stored = await rawRead();
       if (stored !== null) {
-        const auth = session(JSON.parse(stored));
+        const auth = parseSession(stored);
+        if (!auth) return null;
         const legacy = readFile(legacyPath);
         if (legacy !== null) {
           // Complete a migration interrupted after the verified write. Never
           // replace an existing OS session with a stale or unrelated file.
-          let matching = false;
-          try { matching = JSON.stringify(session(JSON.parse(legacy))) === JSON.stringify(auth); } catch {}
+          const matching = JSON.stringify(parseSession(legacy)) === JSON.stringify(auth);
           if (matching && readFile(legacyPath) === legacy) removeFile(legacyPath);
         }
         return auth;
       }
       const legacy = readFile(legacyPath);
       if (legacy === null) return null;
-      const auth = session(JSON.parse(legacy));
+      const auth = parseSession(legacy);
+      // Leave an unreadable legacy file in place; a successful login removes it.
+      if (!auth) return null;
       await saveVerified(auth);
       // Preserve the original if a concurrent command replaced it during migration.
       if (readFile(legacyPath) !== legacy) throw new Error('Legacy session changed during migration');

@@ -1,4 +1,4 @@
-name: Credential storage
+name: CI
 on:
   pull_request:
   push:
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  credentials:
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: npm run docs:check
       - name: Native credentials (macOS and Windows)
         if: runner.os != 'Linux'
         run: npm run test:credentials

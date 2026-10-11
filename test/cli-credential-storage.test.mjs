@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { authHarness, session } from './helpers/auth-session-harness.mjs';
+import { createSessionStore } from '../bin/lib/session-store.mjs';
 
 function setup(t) { const h = authHarness(); t.after(() => h.cleanup()); return h; }
 function successful(result) { assert.equal(result.status, 0, JSON.stringify(result.output)); assert.equal(result.output.ok, true); }
@@ -74,9 +75,42 @@ test('secure session takes precedence over a stale legacy file', t => {
   assert.equal(h.run(['auth', 'status']).output.data.uid, 'dummy-user');
 });
 
-test('corrupt legacy session reports storage failure and is preserved', t => {
+test('corrupt legacy session reads as signed out until login replaces it', t => {
   const h = setup(t); const legacy = h.legacy(); fs.writeFileSync(legacy, '{');
-  storageFailure(h.run(['auth', 'status'])); assert.equal(fs.readFileSync(legacy, 'utf8'), '{');
+  const status = h.run(['auth', 'status']); successful(status);
+  assert.equal(status.output.data.authenticated, false); assert.equal(fs.readFileSync(legacy, 'utf8'), '{');
+  assert.equal(h.run(['users', 'me']).output.error.code, 'AUTH_REQUIRED');
+  successful(h.login()); assert.equal(fs.existsSync(legacy), false);
+});
+
+test('corrupt OS-store session reads as signed out and login recovers', t => {
+  const h = setup(t); successful(h.login());
+  const storePath = path.join(h.directory, 'credential-stub.json');
+  fs.writeFileSync(storePath, JSON.stringify(Object.fromEntries(Object.keys(h.entries()).map(key => [key, '{']))));
+  const status = h.run(['auth', 'status']); successful(status); assert.equal(status.output.data.authenticated, false);
+  assert.equal(h.run(['users', 'me']).output.error.code, 'AUTH_REQUIRED');
+  successful(h.login()); assert.equal(h.run(['auth', 'status']).output.data.authenticated, true);
+});
+
+test('file storage leaves permissions of an existing config directory unchanged', t => {
+  if (process.platform === 'win32') return t.skip('Unix permissions only');
+  const h = setup(t); fs.mkdirSync(h.configDir, { mode: 0o755 }); fs.chmodSync(h.configDir, 0o755);
+  successful(h.login({ changes: { SETTLEUP_AUTH_STORAGE: 'file' } }));
+  assert.equal(fs.statSync(h.configDir).mode & 0o777, 0o755);
+  assert.equal(fs.statSync(path.join(h.configDir, 'test')).mode & 0o777, 0o700);
+});
+
+test('Windows sessions above the Credential Manager limit fail with file-mode guidance', async t => {
+  const h = setup(t);
+  const store = createSessionStore({
+    configDir: h.configDir, environment: 'test', apiBaseUrl: 'https://a.invalid', authBaseUrl: 'https://b.invalid', platform: 'win32',
+  });
+  await assert.rejects(store.write({ ...session, accessToken: 'a'.repeat(3000) }), error => {
+    assert.equal(error.cliCode, 'AUTH_STORAGE_FAILED');
+    assert.match(error.details.help, /at most 2560.*SETTLEUP_AUTH_STORAGE=file/);
+    assert.doesNotMatch(JSON.stringify(error.details), /aaaa/);
+    return true;
+  });
 });
 
 test('revoked refresh token stops before database access', t => {
