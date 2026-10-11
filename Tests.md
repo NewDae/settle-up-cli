@@ -29,6 +29,7 @@ npm test
 This runs:
 
 - [test/cli-contract.test.mjs](test/cli-contract.test.mjs)
+- [test/cli-credential-storage.test.mjs](test/cli-credential-storage.test.mjs) (see [credential storage](#credential-storage))
 - [test/cli-help.test.mjs](test/cli-help.test.mjs)
 - [test/cli-guidance.test.mjs](test/cli-guidance.test.mjs)
 - [test/negative-inputs.test.mjs](test/negative-inputs.test.mjs)
@@ -43,7 +44,7 @@ What it covers:
 | Error codes and recovery | Actual CLI failures use stable codes. Validation links to the command's schema/help; backend failure guidance preserves status/body details and avoids blind write retries. |
 | Identity model | Auth UID and group member IDs remain separate; the CLI rejects `uid` in payer and recipient references. |
 | Primitive formats | Actual CLI input checks reject numeric amounts/weights, malformed decimal strings, lowercase currency codes, ISO date strings, and timezone names. |
-| Write inputs and discovery | Valid group, member, category, expense, transfer, and patch inputs produce expected HTTP requests. Schema output explains required/optional and nested field types, formats, meanings, and invocation; advertised examples exercise CLI validators. |
+| Write inputs and discovery | Valid group, member, category, expense, transfer, and patch inputs produce expected HTTP requests; creates fill backend-required defaults only when omitted. Schema output explains required/optional and nested field types, formats, meanings, and invocation; advertised examples exercise CLI validators. |
 | Patch requests | The CLI sends only supplied fields, including complete supplied arrays/objects and explicit null clearing; it does not fill in omitted fields. |
 | Negative cases | Malformed write inputs return `INVALID_INPUT` before any backend request with a fresh session. Unknown transaction members are rejected after the member lookup and before any write. |
 | Response mapping | The CLI preserves backend group, permission, user, and userGroup records, adds change IDs, and normalizes debt responses. |

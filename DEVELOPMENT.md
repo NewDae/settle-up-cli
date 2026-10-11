@@ -4,11 +4,12 @@ For installation and everyday usage, see [README.md](README.md). Requirements an
 
 ## Run from source
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer. `npm ci` installs the OS credential-store module that sign-in needs.
 
 ```bash
 git clone https://github.com/NewDae/settle-up-cli.git
 cd settle-up-cli
+npm ci
 node bin/settleup.mjs --help
 npm link
 ```

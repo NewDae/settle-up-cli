@@ -25,6 +25,8 @@ const invalidInputs = [
   ['member patch has boolean defaultWeight', memberPatch, { ...memberPatchInput, defaultWeight: false }, /defaultWeight/],
   ['group has lowercase currency', group, { ...createGroupInput, convertedToCurrency: 'usd' }, /convertedToCurrency/],
   ['group has invalid permission', group, { ...createGroupInput, defaultPermission: 15 }, /defaultPermission/],
+  ['group has numeric ownerColor', group, { ...createGroupInput, ownerColor: 1 }, /ownerColor/],
+  ['group has string inviteLinkActive', group, { ...createGroupInput, inviteLinkActive: 'yes' }, /inviteLinkActive/],
   ['group has malformed firstMember', group, { ...createGroupInput, firstMember: { active: true } }, /name/],
   ['categories have numeric labels', categories, { ...setCategoriesInput, categories: { food: 9 } }, /categories/],
   ['categories are not a mapping', categories, { categories: [] }, /categories/],

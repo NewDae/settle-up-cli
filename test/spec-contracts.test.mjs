@@ -74,6 +74,54 @@ test('members add sends the input and uses the backend-generated member ID', () 
   assert.deepEqual(result.output.data, { memberId: 'm_created', member: memberInput });
 });
 
+// The backend rejects new members without active/defaultWeight and new
+// transactions without fixedExchangeRate, so creates fill those defaults.
+test('members add and the first group member fill backend-required defaults', () => {
+  const added = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
+    input: { name: 'Sid' }, responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
+  });
+  assertSuccess(added);
+  assert.deepEqual(added.requests[0].body, { name: 'Sid', active: true, defaultWeight: '1' });
+  assert.deepEqual(added.output.data.member, { name: 'Sid', active: true, defaultWeight: '1' });
+
+  const explicit = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
+    input: { name: 'Sid', active: false, defaultWeight: '2' },
+    responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
+  });
+  assert.deepEqual(explicit.requests[0].body, { name: 'Sid', active: false, defaultWeight: '2' });
+
+  const group = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
+    input: { name: 'Trip', convertedToCurrency: 'INR', firstMember: { name: 'Anshul' } },
+    responses: [
+      { method: 'PUT', pathPattern: '^/permissions/codex-[^/]+/u_test\\.json$', body: { level: 30 } },
+      { method: 'GET', pathPattern: '^/groups/codex-[^/]+\\.json$', body: null },
+      { method: 'PATCH', pathPattern: '^/groups/codex-[^/]+\\.json$', body: {} },
+      { method: 'POST', pathPattern: '^/members/codex-[^/]+\\.json$', body: { name: 'm_created' } },
+      { method: 'PUT', pathPattern: '^/userGroups/u_test/codex-[^/]+\\.json$', body: {} },
+      { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
+    ],
+  });
+  assertSuccess(group);
+  assert.deepEqual(group.requests[3].body, { name: 'Anshul', active: true, defaultWeight: '1' });
+});
+
+for (const command of ['expenses', 'transfers']) {
+  test(`${command} create fills fixedExchangeRate only when omitted`, () => {
+    const base = command === 'expenses' ? expenseInput : transferInput;
+    for (const [supplied, expected] of [[undefined, false], [true, true]]) {
+      const input = { ...base };
+      delete input.fixedExchangeRate;
+      if (supplied !== undefined) input.fixedExchangeRate = supplied;
+      const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
+        input, responses: [membersResponse, { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_created' } }],
+      });
+      assertSuccess(result);
+      assert.deepEqual(result.requests[1].body, { ...input, fixedExchangeRate: expected });
+      assert.equal(result.output.data.transaction.fixedExchangeRate, expected);
+    }
+  });
+}
+
 test('members update sends only provided fields and explicit null clearing', () => {
   const input = { ...schemaExample('members.update'), photoUrl: null };
   const result = runAuthenticatedCli(['members', 'update', ...memberFlags, '--input', '-'], {
