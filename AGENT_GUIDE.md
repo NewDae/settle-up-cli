@@ -23,7 +23,7 @@ Start a browser login in the environment where you run the CLI:
 settleup auth login --browser
 ```
 
-Show the user the returned `loginUrl` and `verificationCode`. Ask them to open the link privately, compare the code, and enter their credentials on the hosted page. Then finish on the same CLI configuration:
+Show the user the returned `loginUrl`. Ask them to open the link privately and enter their credentials on the hosted page. Then finish on the same CLI configuration:
 
 ```sh
 settleup auth login --complete

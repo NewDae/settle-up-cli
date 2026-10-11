@@ -74,7 +74,7 @@ Before the first production deployment:
 
 Local development: apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --local`, run the auth Worker locally with `npm run auth:dev`, then run `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`. Use `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` with matching local/staging API/auth configuration. The public website uses no third-party scripts on the login page; CSP allows only same-origin requests. Keep request-body logging disabled in both hosted services and any proxy.
 
-`npm run docs:sync` also copies shared login cryptography to `docs/login-crypto.js` and updates the embedded machine guide. Login endpoint tests use real SQLite SQL, a local HTTP server, the real CLI executable, and a stub of the existing auth Worker. They do not verify production bindings or actual Firebase credentials.
+`npm run docs:sync` also updates the embedded machine guide. Login endpoint tests use real SQLite SQL, a local HTTP server, the real CLI executable, and a stub of the existing auth Worker. They do not verify production bindings or actual Firebase credentials.
 
 ## Auth Worker source
 

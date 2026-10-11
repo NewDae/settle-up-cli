@@ -12,13 +12,13 @@ The password is sent over HTTPS to the hosted auth service and is not saved by t
 
 ```sh
 settleup auth login --browser
-# Open the returned loginUrl privately and compare verificationCode.
+# Open the returned loginUrl privately and sign in.
 # Enter email/password on the page, then finish in the same CLI environment:
 settleup auth login --complete
 settleup groups list
 ```
 
-`--browser` returns a JSON object with `status: pending`, `loginUrl`, `verificationCode`, `expiresAt`, and `next`. A link lasts 10 minutes. The user's browser and the CLI can be on different computers. `--complete` returns `status: pending` until the page finishes; it saves the session when ready. `--complete --wait` polls every three seconds until ready or expired. `auth logout` clears the local pending login and requests remote cancellation.
+`--browser` returns a JSON object with `status: pending`, `loginUrl`, `expiresAt`, and `next`. A link lasts 10 minutes. The user's browser and the CLI can be on different computers. `--complete` returns `status: pending` until the page finishes; it saves the session when ready. `--complete --wait` polls every three seconds until ready or expired. `auth logout` clears the local pending login and requests remote cancellation.
 
 The hosted login page is part of this independent community integration, not an official Settle Up sign-in page. The full [auth Worker source and configuration](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker), website backend, and CLI are maintained in this repository; public source makes credential handling reviewable but does not prove a hosted deployment matches it. Its same-origin Pages Function forwards the email/password to the existing auth Worker through an internal Cloudflare service binding. The Worker holds the Firebase API key and performs Firebase password verification. The key is never returned to the browser or bundled with the CLI. Refresh continues through the existing Worker.
 

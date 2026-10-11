@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createLoginKey, loginCode, decryptLogin } from './browser-crypto.mjs';
+import { createLoginKey, decryptLogin } from './browser-crypto.mjs';
 
 const error = (message, cliCode = 'INVALID_INPUT') => Object.assign(new Error(message), { cliCode });
 export function createBrowserLogin({ configDir, environment, apiBaseUrl, authBaseUrl, loginBaseUrl }) {
@@ -63,8 +63,8 @@ export function createBrowserLogin({ configDir, environment, apiBaseUrl, authBas
       }
       return {
         status: 'pending', loginUrl: `${base}/login#${result.browserId}`,
-        verificationCode: await loginCode(keys.publicKey), expiresAt: result.expiresAt,
-        next: 'Open loginUrl privately, compare verificationCode, then run settleup auth login --complete. Never send passwords or tokens in chat.',
+        expiresAt: result.expiresAt,
+        next: 'Open loginUrl privately and sign in, then run settleup auth login --complete. Never send passwords or tokens in chat.',
       };
     },
     async complete({ wait = false } = {}) {

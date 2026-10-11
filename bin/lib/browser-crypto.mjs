@@ -1,4 +1,4 @@
-// Shared by the CLI and login page. Private keys never leave the CLI.
+// Shared by the CLI and website backend. Private keys never leave the CLI.
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
 const unb64 = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
 export async function createLoginKey() {
@@ -7,11 +7,6 @@ export async function createLoginKey() {
     publicKey: b64(await crypto.subtle.exportKey('raw', keys.publicKey)),
     privateKey: await crypto.subtle.exportKey('jwk', keys.privateKey),
   };
-}
-export async function loginCode(publicKey) {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', unb64(publicKey)));
-  const code = [...digest.slice(0, 5)].map(value => value.toString(16).padStart(2, '0')).join('').toUpperCase();
-  return `${code.slice(0, 5)}-${code.slice(5)}`;
 }
 async function sharedKey(privateKey, publicKey, usage) {
   const peer = await crypto.subtle.importKey('raw', unb64(publicKey), { name: 'ECDH', namedCurve: 'P-256' }, false, []);

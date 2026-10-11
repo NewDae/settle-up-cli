@@ -2,6 +2,7 @@
 
 ## 0.3.0 (unreleased)
 
+- Simplify browser sign-in to email/password through the private CLI link, with no code confirmation. Add an auth diagram and FAQ to the landing page, and use matching navigation and footers on both pages.
 - Consolidate the existing hosted auth Worker source, deployment configuration, and tests into `server/auth-worker/` in the public CLI repository. Existing Worker identities and Cloudflare secrets are retained.
 
 - Add `auth login --browser` and `auth login --complete [--wait]` so users can sign in privately on a hosted page while an agent runs the CLI on another computer.

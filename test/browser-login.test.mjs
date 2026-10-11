@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { handleBrowserLogin } from '../server/browser-login.mjs';
-import { createLoginKey, encryptLogin, decryptLogin, loginCode } from '../bin/lib/browser-crypto.mjs';
+import { createLoginKey, encryptLogin, decryptLogin } from '../bin/lib/browser-crypto.mjs';
 
 function database() {
   const sqlite = new DatabaseSync(':memory:');
@@ -53,7 +53,6 @@ test('encrypted handoff binds the browser link and decrypts only with the origin
   await assert.rejects(decryptLogin(encrypted, keys.privateKey, 'different-link'));
   const changed = { ...encrypted, iv: encrypted.iv === 'AAAAAAAAAAAAAAAA' ? 'BBBBBBBBBBBBBBBB' : 'AAAAAAAAAAAAAAAA' };
   await assert.rejects(decryptLogin(changed, keys.privateKey, 'link-1'));
-  assert.match(await loginCode(keys.publicKey), /^[0-9A-F]{5}-[0-9A-F]{5}$/);
 });
 
 test('database holds ciphertext and hashed poll credential; completion and polling are one-use', async t => {
@@ -195,7 +194,7 @@ test('real CLI start, pending, encrypted completion, status, hosted Worker refre
   assert.equal((await h.run(['auth', 'login', '--complete'])).output.data.status, 'pending');
   assert.equal((await h.run(['auth', 'login', '--browser'])).output.error.code, 'INVALID_INPUT');
   const context = (await h.browser('context', { browserId })).body.data;
-  assert.equal(await loginCode(context.publicKey), started.output.data.verificationCode);
+  assert.ok(context.expiresAt > Date.now());
   const value = session();
   // Expiring soon forces the very next authenticated command to refresh.
   value.expiresAt = Date.now() + 50_000;

@@ -1,5 +1,3 @@
-import { loginCode } from './login-crypto.js';
-
 const byId = id => document.getElementById(id);
 const browserId = location.hash.slice(1);
 // The fragment is never sent to the server, analytics, or referrers.
@@ -28,9 +26,8 @@ async function initialize() {
   }
   try {
     context = await request('context', { browserId });
-    byId('verification-code').textContent = await loginCode(context.publicKey);
     byId('login-form').hidden = false;
-    status('Compare the code below with the one from your agent before signing in.');
+    status('');
     const remaining = Math.max(0, context.expiresAt - Date.now());
     window.setTimeout(() => {
       if (!connected) { byId('login-form').hidden = true; status('This login link has expired. Ask your agent for a new link.', true); }
@@ -39,9 +36,9 @@ async function initialize() {
 }
 byId('login-form').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!context || !byId('confirm-code').checked || Date.now() >= context.expiresAt) return;
+  if (!context || Date.now() >= context.expiresAt) return;
   byId('sign-in').disabled = true;
-  status('Signing in securely…');
+  status('Signing in…');
   const credentials = { browserId, email: byId('email').value.trim(), password: byId('password').value };
   try {
     // The same-origin endpoint calls the existing hosted auth Worker using an
@@ -50,7 +47,8 @@ byId('login-form').addEventListener('submit', async event => {
     connected = true;
     byId('login-form').hidden = true;
     byId('success').hidden = false;
-    status('Signed in. Your CLI can now collect the encrypted session.');
+    status('');
+    byId('migration-note')?.setAttribute('hidden', '');
   } catch (error) {
     status(error.message || 'Could not connect. Please try again.', true);
   } finally { credentials.password = ''; byId('password').value = ''; byId('sign-in').disabled = false; }

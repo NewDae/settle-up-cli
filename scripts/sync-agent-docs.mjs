@@ -19,15 +19,6 @@ for (const name of ['agent.md', 'llms.txt']) {
   }
 }
 
-const cryptoSource = await fs.readFile(new URL('../bin/lib/browser-crypto.mjs', import.meta.url), 'utf8');
-const cryptoTarget = new URL('../docs/login-crypto.js', import.meta.url);
-if (check) {
-  if (lf(await fs.readFile(cryptoTarget, 'utf8').catch(() => '')) !== lf(cryptoSource)) {
-    console.error('docs/login-crypto.js is stale. Run npm run docs:sync.');
-    process.exitCode = 1;
-  }
-} else await fs.writeFile(cryptoTarget, cryptoSource);
-
 const indexTarget = new URL('../docs/index.html', import.meta.url);
 const index = lf(await fs.readFile(indexTarget, 'utf8'));
 const escapeHtml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');
