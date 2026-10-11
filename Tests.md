@@ -124,3 +124,18 @@ The report includes each command, its JSON output, and a one-line pass check.
 - [Settle Up API index](https://api.settleup.io/)
 - [Data entities](https://api.settleup.io/entities/)
 - [Operations](https://api.settleup.io/operations/)
+
+## Credential storage
+
+`test/cli-credential-storage.test.mjs` runs the real CLI across processes with mocked native storage and strictly offline HTTP responses. It covers login, refresh, logout, store failures and error redaction, verified legacy migration, explicit file storage and Unix permissions, and session isolation by environment, directory, and backend.
+
+`npm run test:credentials` exercises the real native OS store using uniquely scoped dummy sessions and mocked HTTP. It never reads the user's normal session or contacts a backend. The dummy credential is deleted after testing. This verifies the CLI integration, not every desktop permission prompt or a security audit of the dependency.
+
+GitHub Actions runs the offline suite and native tests on macOS, Windows, and Linux. Linux starts GNOME Keyring within a D-Bus session, and also tests an unavailable service. To reproduce Linux locally:
+
+```bash
+docker build -f test/docker/Dockerfile -t settleup-credential-test .
+docker run --rm settleup-credential-test
+```
+
+The integration runner deliberately uses explicit file storage with its temporary config directory so sandbox runs do not leave OS credentials behind.

@@ -51,7 +51,8 @@ This CLI is a shell tool, not an MCP server. Use a shell-capable agent with the 
 - `AUTH_REQUIRED`: ask the user to sign in in their terminal.
 - `AUTH_INVALID`: check email/password login and the account migration instructions.
 - `AUTH_REFRESH_FAILED`: ask the user to sign in again.
+- `AUTH_STORAGE_FAILED`: ask the user to unlock or enable the OS credential store; never switch to plaintext storage without their explicit choice.
 - `API_RATE_LIMITED`: back off instead of retrying immediately.
 - `GROUP_ACCESS_DENIED`: stop and ask the user to confirm the group and their access.
 
-`settleup auth logout` removes the local session. Sessions are stored under `~/.config/settleup-cli/<environment>/auth.json` by default (directory mode 0700 and file mode 0600 on Unix); they are not stored in an OS keychain.
+`settleup auth logout` removes the local session. Sessions use the OS credential store by default. Plaintext file storage requires the explicit setting `SETTLEUP_AUTH_STORAGE=file`; see [LOGIN.md](LOGIN.md#credential-storage).

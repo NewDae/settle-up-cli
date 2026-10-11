@@ -57,8 +57,8 @@ Backend paths are under:
 | CLI command | Backend calls |
 |---|---|
 | `auth login` | `POST /auth/login`; then ensures `/users/<uid>` exists. |
-| `auth status` | Local auth file only. |
-| `auth logout` | Local auth file only. |
+| `auth status` | Local credential store (or explicit file storage); see LOGIN.md. |
+| `auth logout` | Local credential store (or explicit file storage); see LOGIN.md. |
 | `users me` | `GET /users/<uid>`. |
 | `groups list` | `GET /userGroups/<uid>`, then `GET /groups/<groupId>` for each group. |
 | `groups get` | `GET /groups/<groupId>`, `GET /permissions/<groupId>`, `GET /userGroups/<uid>/<groupId>`. |

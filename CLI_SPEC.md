@@ -110,17 +110,11 @@ Local/staging development flow:
 
 ### Local storage
 
-Preferred:
-
-- OS keychain for tokens
-
-Fallback:
-
-- config directory with strict file permissions
-
-Suggested paths:
-
-- `~/.config/settleup-cli/<environment>/auth.json`
+- OS credential store is the default: macOS Keychain, Windows Credential Manager, or persistent Linux Secret Service.
+- `SETTLEUP_AUTH_STORAGE=file` explicitly selects plaintext storage with restrictive Unix permissions; there is no silent fallback.
+- Sessions are isolated by config directory, environment, database URL, and auth URL.
+- Legacy `~/.config/settleup-cli/<environment>/auth.json` sessions migrate only after a verified store write. Explicit file sessions use `auth-<scope-hash>.json`.
+- See [LOGIN.md](LOGIN.md#credential-storage) for availability requirements, migration, and logout semantics.
 
 ---
 
@@ -159,6 +153,7 @@ Suggested paths:
 - `AUTH_REQUIRED`
 - `AUTH_INVALID`
 - `AUTH_REFRESH_FAILED`
+- `AUTH_STORAGE_FAILED`
 - `INVALID_INPUT`
 - `GROUP_NOT_FOUND`
 - `GROUP_ACCESS_DENIED`
@@ -226,6 +221,7 @@ Output:
   "ok": true,
   "data": {
     "authenticated": true,
+    "storage": "keyring",
     "uid": "u1",
     "email": "me@example.com",
     "expiresAt": 1777872000000

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -17,6 +17,7 @@ function runCli(args, { input } = {}) {
     input,
     env: {
       ...process.env,
+      SETTLEUP_AUTH_STORAGE: 'file',
       SETTLEUP_CLI_CONFIG_DIR: configDir,
       SETTLEUP_ENV: 'test',
       SETTLEUP_API_BASE_URL: '',
@@ -39,6 +40,7 @@ function runCliAsync(args, { input = '', cwd = repoRoot, env = {} } = {}) {
       encoding: 'utf8',
       env: {
         ...process.env,
+      SETTLEUP_AUTH_STORAGE: 'file',
         ...env,
       },
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -165,6 +167,7 @@ test('auth status is deterministic without a saved session', () => {
     ok: true,
     data: {
       authenticated: false,
+      storage: 'file',
       uid: null,
       email: null,
       expiresAt: null,
@@ -232,7 +235,7 @@ test('auth login calls the configured auth wrapper and stores staging session se
   assert.deepEqual(requests[0].body, { email: 'me@example.com', password: 'secret' });
   assert.equal(requests[1].url, `${apiBaseUrl}/users/u1.json?auth=token-1`);
 
-  const authPath = path.join(configDir, 'staging', 'auth.json');
+  const authPath = path.join(configDir, 'staging', readdirSync(path.join(configDir, 'staging')).find(name => name.startsWith('auth-')));
   const auth = JSON.parse(readFileSync(authPath, 'utf8'));
   assert.equal(auth.accessToken, 'token-1');
 
