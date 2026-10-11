@@ -1,0 +1,35 @@
+# Settle Up CLI
+
+> Open-source, MIT-licensed command-line tool for Settle Up. Designed for people and shell-capable AI agents. This is a CLI, not an MCP server.
+
+## Install
+
+Requires Node.js 22 or newer.
+
+npm install -g settle-up-cli
+
+Command name: settleup. Production endpoints are included; no Firebase API key or backend setup is required.
+
+## Authentication
+
+Ask the user to run `settleup auth login` in their own terminal. Email/password only. Google, Apple and other sign-in users should first visit https://settleup.app/migrate-account to migrate to email/password. Never request passwords or session tokens in an agent conversation. Never read local auth files. The CLI refreshes tokens automatically.
+
+## Agent workflow
+
+1. `settleup --help` for command discovery.
+2. `settleup auth status` for local session presence.
+3. `settleup groups list` and `settleup members list --group-id <groupId>` to resolve exact IDs.
+4. Use read commands to inspect transactions and debts.
+5. `settleup schema expenses.create` (or another write operation) before constructing a JSON payload.
+6. Perform only user-authorized writes with exact IDs and `--input <file.json>` or stdin via `--input -`.
+7. Read back the result. Never blindly retry a create operation after an uncertain response.
+
+Stdout is JSON: `{ "ok": true, "data": ..., "meta": ... }` or `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }`. Errors have nonzero exit codes. Account uid and group memberId differ; payments and splits use memberId. Amounts and weights are decimal strings. Write dates are epoch milliseconds. Patches preserve omitted fields; supplied arrays and objects replace their stored fields in full.
+
+## Resources
+
+- [Agent guide](https://github.com/NewDae/settle-up-cli/blob/main/AGENT_GUIDE.md)
+- [CLI contract](https://github.com/NewDae/settle-up-cli/blob/main/CLI_SPEC.md)
+- [Login guide](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md)
+- [npm package](https://www.npmjs.com/package/settle-up-cli)
+- [Source and issues](https://github.com/NewDae/settle-up-cli)
