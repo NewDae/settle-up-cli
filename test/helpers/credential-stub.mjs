@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 const filename = process.env.CREDENTIAL_TEST_STORE;
+// Simulates a platform without a prebuilt native binary: the import itself fails.
+if (process.env.CREDENTIAL_TEST_FAIL === 'import') throw new Error('Native module unavailable SECRET-MUST-NOT-LEAK');
 function read() { return fs.existsSync(filename) ? JSON.parse(fs.readFileSync(filename, 'utf8')) : {}; }
 function fail(operation) {
   if (process.env.CREDENTIAL_TEST_FAIL === operation) throw new Error('Native error containing dummy-refresh SECRET-MUST-NOT-LEAK');

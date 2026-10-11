@@ -18,6 +18,8 @@
 
 ### Fixed
 
+- A wrong email or password returned `API_REQUEST_FAILED` ("check connectivity") with direct Firebase sign-in, or `GROUP_ACCESS_DENIED` with hosted sign-in. A rejected sign-in is now `AUTH_INVALID` with sign-in guidance; service outages keep `API_REQUEST_FAILED`.
+- `transactions list` and `changes list` silently returned wrong results for invalid filters: `--limit abc` or `0` returned nothing, `--limit -1` dropped the last item, a bare `--limit` returned one item, an unknown `--order` sorted ascending, a misspelled `--type` or an impossible date such as `2026-02-30` returned nothing. These now return `INVALID_INPUT` before any request.
 - Creating a member (`members add`, or the first member in `groups create`) without `active` or `defaultWeight`, or a transaction without `fixedExchangeRate`, failed with `GROUP_ACCESS_DENIED` because the backend requires those fields. The CLI now fills the defaults `true`, `"1"`, and `false` when they are omitted.
 
 ### Added

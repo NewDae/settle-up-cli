@@ -21,32 +21,46 @@ function schemaExample(command) {
   return result.output.data.example;
 }
 
+// The backend rejects new members without active/defaultWeight and new
+// transactions without fixedExchangeRate, so creates fill those defaults.
 for (const [command, fixture] of [['expenses', expenseInput], ['transfers', transferInput]]) {
-  test(`${command} create validates members and posts the exact transaction`, () => {
-    const input = { ...fixture, exchangeRates: { USD: '0.012' } };
-    const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
-      input, responses: [membersResponse, { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_created' } }],
+  test(`${command} create validates members, posts the exact transaction, and fills only omitted defaults`, () => {
+    const create = (input, members = membersResponse) => runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
+      input, responses: [members, { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_created' } }],
     });
-    assertSuccess(result);
-    assert.deepEqual(result.requests[1].body, input);
-    assert.deepEqual(result.requests[1].headers, { 'content-type': 'application/json' });
-    assert.deepEqual(result.output.data, { transactionId: 'tx_created', transaction: input });
+
+    const input = { ...fixture, exchangeRates: { USD: '0.012' }, fixedExchangeRate: true };
+    const exact = create(input);
+    assertSuccess(exact);
+    assert.equal(exact.requests[0].method, 'GET');
+    assert.deepEqual(exact.requests[1].body, input);
+    assert.deepEqual(exact.requests[1].headers, { 'content-type': 'application/json' });
+    assert.deepEqual(exact.output.data, { transactionId: 'tx_created', transaction: input });
+
+    const { fixedExchangeRate, ...withoutRate } = fixture;
+    const defaulted = create(withoutRate);
+    assert.deepEqual(defaulted.requests[1].body, { ...withoutRate, fixedExchangeRate: false });
+
+    // The advertised schema example must pass validation unchanged.
+    const example = schemaExample(`${command}.create`);
+    const advertised = create(example, { ...membersResponse, body: { member_id_1: { name: 'Example payer' }, member_id_2: { name: 'Example recipient' } } });
+    assertSuccess(advertised);
+    assert.deepEqual(advertised.requests[1].body, example);
   });
 }
 
+const groupCreateResponses = [
+  { method: 'PUT', pathPattern: '^/permissions/[-0-9A-Za-z_]{20}/u_test\\.json$', body: { level: 30 } },
+  { method: 'GET', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: null },
+  { method: 'PATCH', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: {} },
+  { method: 'POST', pathPattern: '^/members/[-0-9A-Za-z_]{20}\\.json$', body: { name: 'm_created' } },
+  { method: 'PUT', pathPattern: '^/userGroups/u_test/[-0-9A-Za-z_]{20}\\.json$', body: {} },
+  { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
+];
+
 test('groups create sends permissions before group metadata and maps the returned first member ID', () => {
   const input = schemaExample('groups.create');
-  const result = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
-    input,
-    responses: [
-      { method: 'PUT', pathPattern: '^/permissions/[-0-9A-Za-z_]{20}/u_test\\.json$', body: { level: 30 } },
-      { method: 'GET', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: null },
-      { method: 'PATCH', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: {} },
-      { method: 'POST', pathPattern: '^/members/[-0-9A-Za-z_]{20}\\.json$', body: { name: 'm_created' } },
-      { method: 'PUT', pathPattern: '^/userGroups/u_test/[-0-9A-Za-z_]{20}\\.json$', body: {} },
-      { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
-    ],
-  });
+  const result = runAuthenticatedCli(['groups', 'create', '--input', '-'], { input, responses: groupCreateResponses });
   assertSuccess(result);
   const { groupId } = result.output.data;
   // Firebase push ID: time-ordered prefix, so a later ID never sorts before an earlier one.
@@ -67,65 +81,25 @@ test('groups create sends permissions before group metadata and maps the returne
   assert.deepEqual(result.requests[4].body, { order: 1, color: '#ec1561', member: 'm_created' });
   assert.equal(result.requests[5].body, groupId);
   assert.equal(result.output.data.firstMemberId, 'm_created');
+
+  const minimal = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
+    input: { name: 'Trip', convertedToCurrency: 'INR', firstMember: { name: 'Anshul' } }, responses: groupCreateResponses,
+  });
+  assertSuccess(minimal);
+  assert.deepEqual(minimal.requests[3].body, { name: 'Anshul', active: true, defaultWeight: '1' });
 });
 
-test('members add sends the input and uses the backend-generated member ID', () => {
-  const input = schemaExample('members.add');
-  const result = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
+test('members add sends supplied fields, fills only omitted defaults, and returns the backend member ID', () => {
+  const add = (input) => runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
     input, responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
   });
-  assertSuccess(result);
-  assert.deepEqual(result.requests[0].body, memberInput);
-  assert.deepEqual(result.output.data, { memberId: 'm_created', member: memberInput });
+  const example = add(schemaExample('members.add'));
+  assertSuccess(example);
+  assert.deepEqual(example.requests[0].body, memberInput);
+  assert.deepEqual(example.output.data, { memberId: 'm_created', member: memberInput });
+  assert.deepEqual(add({ name: 'Sid' }).requests[0].body, { name: 'Sid', active: true, defaultWeight: '1' });
+  assert.deepEqual(add({ name: 'Sid', active: false, defaultWeight: '2' }).requests[0].body, { name: 'Sid', active: false, defaultWeight: '2' });
 });
-
-// The backend rejects new members without active/defaultWeight and new
-// transactions without fixedExchangeRate, so creates fill those defaults.
-test('members add and the first group member fill backend-required defaults', () => {
-  const added = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
-    input: { name: 'Sid' }, responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
-  });
-  assertSuccess(added);
-  assert.deepEqual(added.requests[0].body, { name: 'Sid', active: true, defaultWeight: '1' });
-  assert.deepEqual(added.output.data.member, { name: 'Sid', active: true, defaultWeight: '1' });
-
-  const explicit = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
-    input: { name: 'Sid', active: false, defaultWeight: '2' },
-    responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
-  });
-  assert.deepEqual(explicit.requests[0].body, { name: 'Sid', active: false, defaultWeight: '2' });
-
-  const group = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
-    input: { name: 'Trip', convertedToCurrency: 'INR', firstMember: { name: 'Anshul' } },
-    responses: [
-      { method: 'PUT', pathPattern: '^/permissions/[-0-9A-Za-z_]{20}/u_test\\.json$', body: { level: 30 } },
-      { method: 'GET', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: null },
-      { method: 'PATCH', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: {} },
-      { method: 'POST', pathPattern: '^/members/[-0-9A-Za-z_]{20}\\.json$', body: { name: 'm_created' } },
-      { method: 'PUT', pathPattern: '^/userGroups/u_test/[-0-9A-Za-z_]{20}\\.json$', body: {} },
-      { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
-    ],
-  });
-  assertSuccess(group);
-  assert.deepEqual(group.requests[3].body, { name: 'Anshul', active: true, defaultWeight: '1' });
-});
-
-for (const command of ['expenses', 'transfers']) {
-  test(`${command} create fills fixedExchangeRate only when omitted`, () => {
-    const base = command === 'expenses' ? expenseInput : transferInput;
-    for (const [supplied, expected] of [[undefined, false], [true, true]]) {
-      const input = { ...base };
-      delete input.fixedExchangeRate;
-      if (supplied !== undefined) input.fixedExchangeRate = supplied;
-      const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
-        input, responses: [membersResponse, { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_created' } }],
-      });
-      assertSuccess(result);
-      assert.deepEqual(result.requests[1].body, { ...input, fixedExchangeRate: expected });
-      assert.equal(result.output.data.transaction.fixedExchangeRate, expected);
-    }
-  });
-}
 
 test('members update sends only provided fields and explicit null clearing', () => {
   const input = { ...schemaExample('members.update'), photoUrl: null };
@@ -141,6 +115,7 @@ for (const [name, input, responses] of [
   ['supplied arrays', { ...transactionPatchInput, whoPaid: [{ memberId: 'm_neha', weight: '1' }] }, [membersResponse]],
   ['supplied object and null clearing', { exchangeRates: { USD: '0.012' }, receiptUrl: null, templateId: null }, []],
   ['purpose', { purpose: 'Updated dinner' }, []],
+  ['the advertised schema example', schemaExample('transactions.update'), [{ ...membersResponse, body: { member_id_1: { name: 'Example member' } } }]],
 ]) {
   test(`transactions update sends only ${name} in the PATCH body`, () => {
     const result = runAuthenticatedCli(['transactions', 'update', ...transactionFlags, '--input', '-'], {
@@ -161,32 +136,6 @@ test('categories set unwraps the categories mapping into its PATCH request', () 
   assertSuccess(result);
   assert.deepEqual(result.requests[0].body, input.categories);
   assert.deepEqual(result.output.data, { groupId: 'g_test', categories: input.categories });
-});
-
-for (const command of ['expenses', 'transfers']) {
-  test(`${command} create accepts its advertised schema example unchanged`, () => {
-    const input = schemaExample(`${command}.create`);
-    const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
-      input, responses: [
-        { ...membersResponse, body: { member_id_1: { name: 'Example payer' }, member_id_2: { name: 'Example recipient' } } },
-        { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_example' } },
-      ],
-    });
-    assertSuccess(result);
-    assert.deepEqual(result.requests[1].body, input);
-  });
-}
-
-test('transactions update accepts its advertised schema example unchanged', () => {
-  const input = schemaExample('transactions.update');
-  const result = runAuthenticatedCli(['transactions', 'update', ...transactionFlags, '--input', '-'], {
-    input, responses: [
-      { ...membersResponse, body: { member_id_1: { name: 'Example member' } } },
-      { method: 'PATCH', path: '/transactions/g_test/tx_test.json', body: input },
-    ],
-  });
-  assertSuccess(result);
-  assert.deepEqual(result.requests[1].body, input);
 });
 
 test('debts recalculate builds the request wrapper itself', () => {

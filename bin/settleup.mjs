@@ -591,14 +591,44 @@ function normalizeDebts(raw) {
   return debts;
 }
 
-function parseDateBound(value, endOfDay = false) {
-  if (!value) return null;
+function invalidFlag(name, expected) {
+  return Object.assign(new Error(`Invalid --${name}; expected ${expected}`), { cliCode: 'INVALID_INPUT', details: {} });
+}
+
+// Optional flags must carry a value; a bare `--category` would otherwise
+// filter on `true` and silently return nothing.
+function optionalFlag(flags, name, expected = 'a value') {
+  const value = flags[name];
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) throw invalidFlag(name, expected);
+  return value;
+}
+
+function parseLimit(flags) {
+  const value = optionalFlag(flags, 'limit', 'a positive integer');
+  if (value === undefined) return null;
+  if (!/^[1-9]\d*$/.test(value)) throw invalidFlag('limit', 'a positive integer');
+  return Number(value);
+}
+
+function parseOrder(flags) {
+  const value = optionalFlag(flags, 'order', 'asc or desc') ?? 'asc';
+  if (!['asc', 'desc'].includes(value)) throw invalidFlag('order', 'asc or desc');
+  return value;
+}
+
+function parseDateBound(flags, name, endOfDay = false) {
+  const value = optionalFlag(flags, name, 'YYYY-MM-DD or epoch milliseconds');
+  if (value === undefined) return null;
   if (/^\d+$/.test(value)) return Number(value);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw Object.assign(new Error(`Invalid date filter: ${value}`), { cliCode: 'INVALID_INPUT', details: {} });
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const date = match && new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  // Reject impossible dates such as 2026-02-30, which Date would roll over.
+  if (!date || date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) {
+    throw invalidFlag(name, 'YYYY-MM-DD or epoch milliseconds');
   }
-  const suffix = endOfDay ? 'T23:59:59.999' : 'T00:00:00.000';
-  return new Date(`${value}${suffix}`).getTime();
+  if (endOfDay) date.setHours(23, 59, 59, 999);
+  return date.getTime();
 }
 
 function transactionIncludesMember(tx, memberId) {
@@ -1112,13 +1142,25 @@ async function main() {
     assertNonEmptyString(email, 'email');
     assertNonEmptyString(password, 'password');
     await sessionStore.check();
-    const json = FIREBASE_API_KEY
-      ? await signInWithFirebase(email, password)
-      : unwrapApiEnvelope(await fetchJson(authUrl('/auth/login'), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      }));
+    let json;
+    try {
+      json = FIREBASE_API_KEY
+        ? await signInWithFirebase(email, password)
+        : unwrapApiEnvelope(await fetchJson(authUrl('/auth/login'), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }));
+    } catch (error) {
+      // A rejected sign-in is a credentials problem, not a group-access or
+      // connectivity one; Firebase answers 400 and hosted auth 401/403.
+      if ([400, 401, 403].includes(error.details?.status) && !error.cliCode?.startsWith('AUTH_')) {
+        throw Object.assign(new Error('Sign-in was rejected; check the email and password'), {
+          cliCode: 'AUTH_INVALID', details: error.details,
+        });
+      }
+      throw error;
+    }
     const accessToken = json.accessToken || json.idToken;
     const auth = {
       accessToken,
@@ -1286,17 +1328,26 @@ async function main() {
 
   if (group === 'transactions' && command === 'list') {
     const groupId = requireFlag(flags, 'group-id');
+    // Validate every filter before fetching so a typo fails instead of
+    // silently returning a wrong or empty list.
+    const type = optionalFlag(flags, 'type', 'expense or transfer');
+    if (type !== undefined && !['expense', 'transfer'].includes(type)) throw invalidFlag('type', 'expense or transfer');
+    const from = parseDateBound(flags, 'from', false);
+    const to = parseDateBound(flags, 'to', true);
+    const memberId = optionalFlag(flags, 'member-id', 'a member ID');
+    const paidBy = optionalFlag(flags, 'paid-by-member-id', 'a member ID');
+    const category = optionalFlag(flags, 'category', 'a category key');
+    const order = parseOrder(flags);
+    const limit = parseLimit(flags);
     let transactions = withIdMap(await dbGet(`/transactions/${groupId}`, auth));
-    const from = parseDateBound(flags.from, false);
-    const to = parseDateBound(flags.to, true);
-    if (flags.type) transactions = transactions.filter((tx) => tx.type === flags.type);
+    if (type) transactions = transactions.filter((tx) => tx.type === type);
     if (from !== null) transactions = transactions.filter((tx) => tx.dateTime >= from);
     if (to !== null) transactions = transactions.filter((tx) => tx.dateTime <= to);
-    if (flags['member-id']) transactions = transactions.filter((tx) => transactionIncludesMember(tx, flags['member-id']));
-    if (flags['paid-by-member-id']) transactions = transactions.filter((tx) => tx.whoPaid?.some((ref) => ref.memberId === flags['paid-by-member-id']));
-    if (flags.category) transactions = transactions.filter((tx) => tx.category === flags.category);
-    transactions.sort((a, b) => flags.order === 'desc' ? b.dateTime - a.dateTime : a.dateTime - b.dateTime);
-    if (flags.limit) transactions = transactions.slice(0, Number(flags.limit));
+    if (memberId) transactions = transactions.filter((tx) => transactionIncludesMember(tx, memberId));
+    if (paidBy) transactions = transactions.filter((tx) => tx.whoPaid?.some((ref) => ref.memberId === paidBy));
+    if (category) transactions = transactions.filter((tx) => tx.category === category);
+    transactions.sort((a, b) => order === 'desc' ? b.dateTime - a.dateTime : a.dateTime - b.dateTime);
+    if (limit !== null) transactions = transactions.slice(0, limit);
     return printJson(ok({ groupId, count: transactions.length, transactions }));
   }
 
@@ -1341,9 +1392,11 @@ async function main() {
 
   if (group === 'changes' && command === 'list') {
     const groupId = requireFlag(flags, 'group-id');
+    const order = parseOrder(flags);
+    const limit = parseLimit(flags);
     let changes = withIdMap(await dbGet(`/changes/${groupId}`, auth));
-    changes.sort((a, b) => flags.order === 'desc' ? b.serverTimestamp - a.serverTimestamp : a.serverTimestamp - b.serverTimestamp);
-    if (flags.limit) changes = changes.slice(0, Number(flags.limit));
+    changes.sort((a, b) => order === 'desc' ? b.serverTimestamp - a.serverTimestamp : a.serverTimestamp - b.serverTimestamp);
+    if (limit !== null) changes = changes.slice(0, limit);
     return printJson(ok({ groupId, count: changes.length, changes }));
   }
 
