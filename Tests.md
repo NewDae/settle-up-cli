@@ -31,6 +31,7 @@ This runs:
 - [test/cli-contract.test.mjs](test/cli-contract.test.mjs)
 - [test/cli-credential-storage.test.mjs](test/cli-credential-storage.test.mjs) (see [credential storage](#credential-storage))
 - [test/cli-help.test.mjs](test/cli-help.test.mjs)
+- [test/cli-reads.test.mjs](test/cli-reads.test.mjs)
 - [test/cli-guidance.test.mjs](test/cli-guidance.test.mjs)
 - [test/negative-inputs.test.mjs](test/negative-inputs.test.mjs)
 - [test/spec-contracts.test.mjs](test/spec-contracts.test.mjs)
@@ -48,6 +49,9 @@ What it covers:
 | Patch requests | The CLI sends only supplied fields, including complete supplied arrays/objects and explicit null clearing; it does not fill in omitted fields. |
 | Negative cases | Malformed write inputs return `INVALID_INPUT` before any backend request with a fresh session. Unknown transaction members are rejected after the member lookup and before any write. |
 | Response mapping | The CLI preserves backend group, permission, user, and userGroup records, adds change IDs, and normalizes debt responses. |
+| Read commands | `groups list`, `members list` (including `--active-only`), `members get`, `categories list`, `transactions get`, and `transactions delete` send the expected request and shape; missing records return `MEMBER_NOT_FOUND` or `TRANSACTION_NOT_FOUND`. |
+| List filters | Every `transactions list` filter, including recipient-only member matches and inclusive local-day `--to` bounds; ordering and limits for transactions and changes; invalid filter values fail with `INVALID_INPUT` before any request. |
+| Sign-in and sessions | Rejected hosted and direct Firebase sign-in return `AUTH_INVALID` while outages stay `API_REQUEST_FAILED`; first sign-in creates the user profile; sessions refresh within the final minute but not earlier; backend 401 maps to `GROUP_ACCESS_DENIED`. |
 | Server task | Debt recalculation constructs `{ request: { groupId } }`; a missing group ID is rejected locally. |
 
 Reusable inputs and backend response samples live in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). [test/helpers/cli-harness.mjs](test/helpers/cli-harness.mjs) launches the executable with isolated configuration and a fresh test session, captures outgoing requests, and supplies scripted responses. Unexpected requests fail; temporary files are removed after each run. Validation lives in the CLI, with no parallel test-only implementation.

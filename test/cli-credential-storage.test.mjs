@@ -179,8 +179,12 @@ test('invalid storage selection fails clearly without a network request', t => {
   assert.equal(result.output.error.code, 'INVALID_INPUT'); assert.deepEqual(h.requests(), []);
 });
 
-test('help does not load an unavailable native credential module', t => {
-  const h = setup(t); successful(h.run(['--help'], { changes: { CREDENTIAL_TEST_FAIL: 'construct' } }));
+test('help and schema never load the native module; session commands report its absence', t => {
+  const h = setup(t); const changes = { CREDENTIAL_TEST_FAIL: 'import' };
+  successful(h.run(['--help'], { changes }));
+  successful(h.run(['schema', 'expenses.create'], { changes }));
+  storageFailure(h.run(['auth', 'status'], { changes }));
+  successful(h.run(['auth', 'status'], { changes: { ...changes, SETTLEUP_AUTH_STORAGE: 'file' } }));
 });
 
 

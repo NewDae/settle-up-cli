@@ -401,6 +401,8 @@ Accepts the [transaction fields](#transaction-fields) except `type`, with every 
 
 Date-only bounds use the CLI process's local timezone: start of day for `--from`, end of day for `--to`. Epoch milliseconds pass through unchanged. Prefer epoch bounds for deterministic agent workflows.
 
+Filters are validated before the fetch. An unknown `--type` or `--order`, a `--limit` that is not a positive integer, an impossible or non-ISO date, or a filter flag given without a value returns `INVALID_INPUT` rather than a silently empty or truncated list. `changes list` validates `--limit` and `--order` the same way.
+
 ## Help and validation requirements
 
 | Discovery command | Required information |
