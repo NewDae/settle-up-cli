@@ -14,6 +14,7 @@
 - `categories set` rejects category labels that are not strings, including `null`.
 - Optional transaction fields (`category`, `fixedExchangeRate`, `exchangeRates`, `receiptUrl`, `templateId`) are validated before any request is sent.
 - `groups create` validates `ownerColor` (string) and `inviteLinkActive` (boolean).
+- New group IDs use the Firebase push-ID format that Settle Up's own apps produce, instead of a `codex-<timestamp>-<random>` string.
 
 ### Fixed
 

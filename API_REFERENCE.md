@@ -81,7 +81,7 @@ Backend paths are under:
 
 `POST /groups` is not used because permissions must exist before group metadata is writable.
 
-The CLI generates the group ID before the permission write. That write creates a minimal group stub containing invite metadata; the CLI reads it and patches group fields rather than replacing the stub. The mapping table above records the complete write order, including member creation, user-group linkage, and current-tab update. This flow is exercised by request tests and the live integration workflow.
+The CLI generates the group ID before the permission write, in the same 20-character Firebase push-ID format that `POST /groups` would produce: 8 time-ordered characters followed by 12 random ones. That write creates a minimal group stub containing invite metadata; the CLI reads it and patches group fields rather than replacing the stub. The mapping table above records the complete write order, including member creation, user-group linkage, and current-tab update. This flow is exercised by request tests and the live integration workflow.
 
 ## Debt And Settlement Notes
 

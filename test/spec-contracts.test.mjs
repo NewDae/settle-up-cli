@@ -39,16 +39,21 @@ test('groups create sends permissions before group metadata and maps the returne
   const result = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
     input,
     responses: [
-      { method: 'PUT', pathPattern: '^/permissions/codex-[^/]+/u_test\\.json$', body: { level: 30 } },
-      { method: 'GET', pathPattern: '^/groups/codex-[^/]+\\.json$', body: null },
-      { method: 'PATCH', pathPattern: '^/groups/codex-[^/]+\\.json$', body: {} },
-      { method: 'POST', pathPattern: '^/members/codex-[^/]+\\.json$', body: { name: 'm_created' } },
-      { method: 'PUT', pathPattern: '^/userGroups/u_test/codex-[^/]+\\.json$', body: {} },
+      { method: 'PUT', pathPattern: '^/permissions/[-0-9A-Za-z_]{20}/u_test\\.json$', body: { level: 30 } },
+      { method: 'GET', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: null },
+      { method: 'PATCH', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: {} },
+      { method: 'POST', pathPattern: '^/members/[-0-9A-Za-z_]{20}\\.json$', body: { name: 'm_created' } },
+      { method: 'PUT', pathPattern: '^/userGroups/u_test/[-0-9A-Za-z_]{20}\\.json$', body: {} },
       { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
     ],
   });
   assertSuccess(result);
   const { groupId } = result.output.data;
+  // Firebase push ID: time-ordered prefix, so a later ID never sorts before an earlier one.
+  assert.match(groupId, /^[-0-9A-Za-z_]{20}$/);
+  const pushChars = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+  const createdAt = [...groupId.slice(0, 8)].reduce((time, char) => time * 64 + pushChars.indexOf(char), 0);
+  assert.ok(Math.abs(Date.now() - createdAt) < 60_000, `push ID time prefix decodes to ${createdAt}`);
   assert.deepEqual(result.requests.map(({ path }) => path), [
     `/permissions/${groupId}/u_test.json`, `/groups/${groupId}.json`, `/groups/${groupId}.json`,
     `/members/${groupId}.json`, `/userGroups/u_test/${groupId}.json`, '/users/u_test/currentTabId.json',
@@ -93,11 +98,11 @@ test('members add and the first group member fill backend-required defaults', ()
   const group = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
     input: { name: 'Trip', convertedToCurrency: 'INR', firstMember: { name: 'Anshul' } },
     responses: [
-      { method: 'PUT', pathPattern: '^/permissions/codex-[^/]+/u_test\\.json$', body: { level: 30 } },
-      { method: 'GET', pathPattern: '^/groups/codex-[^/]+\\.json$', body: null },
-      { method: 'PATCH', pathPattern: '^/groups/codex-[^/]+\\.json$', body: {} },
-      { method: 'POST', pathPattern: '^/members/codex-[^/]+\\.json$', body: { name: 'm_created' } },
-      { method: 'PUT', pathPattern: '^/userGroups/u_test/codex-[^/]+\\.json$', body: {} },
+      { method: 'PUT', pathPattern: '^/permissions/[-0-9A-Za-z_]{20}/u_test\\.json$', body: { level: 30 } },
+      { method: 'GET', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: null },
+      { method: 'PATCH', pathPattern: '^/groups/[-0-9A-Za-z_]{20}\\.json$', body: {} },
+      { method: 'POST', pathPattern: '^/members/[-0-9A-Za-z_]{20}\\.json$', body: { name: 'm_created' } },
+      { method: 'PUT', pathPattern: '^/userGroups/u_test/[-0-9A-Za-z_]{20}\\.json$', body: {} },
       { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
     ],
   });
