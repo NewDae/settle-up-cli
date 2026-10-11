@@ -428,6 +428,16 @@ function assertMemberInput(input, { partial = false } = {}) {
   }
 }
 
+// The backend rejects new members and transactions that omit these fields
+// (401 "Permission denied"), so creates fill them with the app's defaults.
+function withMemberDefaults(member) {
+  return { active: true, defaultWeight: '1', ...member };
+}
+
+function withTransactionDefaults(transaction) {
+  return { fixedExchangeRate: false, ...transaction };
+}
+
 function assertGroupInput(input) {
   if (!isObject(input)) throw Object.assign(new Error('Input must be an object'), { cliCode: 'INVALID_INPUT', details: {} });
   assertNonEmptyString(input.name, 'name');
@@ -440,6 +450,12 @@ function assertGroupInput(input) {
   }
   if (Object.hasOwn(input, 'remindOldDebts') && typeof input.remindOldDebts !== 'boolean') {
     throw Object.assign(new Error('Invalid field: remindOldDebts'), { cliCode: 'INVALID_INPUT', details: {} });
+  }
+  if (Object.hasOwn(input, 'ownerColor') && typeof input.ownerColor !== 'string') {
+    throw Object.assign(new Error('Invalid field: ownerColor'), { cliCode: 'INVALID_INPUT', details: {} });
+  }
+  if (Object.hasOwn(input, 'inviteLinkActive') && typeof input.inviteLinkActive !== 'boolean') {
+    throw Object.assign(new Error('Invalid field: inviteLinkActive'), { cliCode: 'INVALID_INPUT', details: {} });
   }
   assertMemberInput(input.firstMember);
 }
@@ -949,8 +965,8 @@ function describeFields(fields, required = []) {
 
 const MEMBER_FIELDS = {
   name: { type: 'string', description: 'Nonempty member display name.' },
-  active: { type: 'boolean', description: 'Whether this member is included by default in future transactions.' },
-  defaultWeight: { type: 'string', format: 'decimal-string', description: 'Default relative split share; "1" is a normal equal share, not a monetary amount.' },
+  active: { type: 'boolean', description: 'Whether this member is included by default in future transactions; defaults to true when a member is created.' },
+  defaultWeight: { type: 'string', format: 'decimal-string', description: 'Default relative split share; "1" is a normal equal share, not a monetary amount. Defaults to "1" when a member is created.' },
   photoUrl: { type: 'string', nullable: true, description: 'Avatar URL; null clears it.' },
   bankAccount: { type: 'string', nullable: true, description: 'Bank account or payout reference for settlement; null clears it.' },
   lightningAddress: { type: 'string', nullable: true, description: 'Lightning payment address; null clears it.' },
@@ -969,7 +985,7 @@ const TRANSACTION_FIELDS = {
   currencyCode: { type: 'string', format: 'currency-code', description: 'Three uppercase letters for the transaction currency, e.g. USD or INR.' },
   dateTime: { type: 'integer', format: 'epoch-milliseconds', description: 'Nonnegative timestamp when the transaction occurred; not an ISO date string.' },
   timezone: { type: 'string', format: 'timezone-offset', description: 'Offset in ±HH:MM format, e.g. +05:30; not a timezone name.' },
-  fixedExchangeRate: { type: 'boolean', description: 'Whether exchange rates were fixed manually.' },
+  fixedExchangeRate: { type: 'boolean', description: 'Whether exchange rates were fixed manually; defaults to false when a transaction is created.' },
   exchangeRates: {
     type: 'object', description: 'Conversion rates from currencyCode to target currencies; a patch replaces the entire map.',
     keys: { type: 'string', format: 'currency-code', description: 'Target currency, e.g. USD.' },
@@ -1173,7 +1189,7 @@ async function main() {
       inviteLinkActive: inputData.inviteLinkActive ?? true,
     };
     await dbPatch(`/groups/${groupId}`, auth, groupPatch);
-    const memberWrite = await dbPost(`/members/${groupId}`, auth, inputData.firstMember);
+    const memberWrite = await dbPost(`/members/${groupId}`, auth, withMemberDefaults(inputData.firstMember));
     const memberId = memberWrite.name;
     const userGroup = { order: 1, color: '#ec1561', member: memberId };
     await dbPut(`/userGroups/${auth.uid}/${groupId}`, auth, userGroup);
@@ -1200,8 +1216,9 @@ async function main() {
     const groupId = requireFlag(flags, 'group-id');
     const inputData = readInput(flags.input);
     assertMemberInput(inputData);
-    const write = await dbPost(`/members/${groupId}`, auth, inputData);
-    return printJson(ok({ memberId: write.name, member: inputData }));
+    const member = withMemberDefaults(inputData);
+    const write = await dbPost(`/members/${groupId}`, auth, member);
+    return printJson(ok({ memberId: write.name, member }));
   }
 
   if (group === 'members' && command === 'update') {
@@ -1236,8 +1253,9 @@ async function main() {
     const inputData = readInput(flags.input);
     assertTransactionInput(inputData, 'expense');
     await assertMembersExist(groupId, auth, collectTransactionMembers(inputData));
-    const write = await dbPost(`/transactions/${groupId}`, auth, inputData);
-    return printJson(ok({ transactionId: write.name, transaction: inputData }));
+    const transaction = withTransactionDefaults(inputData);
+    const write = await dbPost(`/transactions/${groupId}`, auth, transaction);
+    return printJson(ok({ transactionId: write.name, transaction }));
   }
 
   if (group === 'transfers' && command === 'create') {
@@ -1245,8 +1263,9 @@ async function main() {
     const inputData = readInput(flags.input);
     assertTransactionInput(inputData, 'transfer');
     await assertMembersExist(groupId, auth, collectTransactionMembers(inputData));
-    const write = await dbPost(`/transactions/${groupId}`, auth, inputData);
-    return printJson(ok({ transactionId: write.name, transaction: inputData }));
+    const transaction = withTransactionDefaults(inputData);
+    const write = await dbPost(`/transactions/${groupId}`, auth, transaction);
+    return printJson(ok({ transactionId: write.name, transaction }));
   }
 
   if (group === 'transactions' && command === 'list') {

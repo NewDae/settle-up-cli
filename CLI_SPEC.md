@@ -2,7 +2,7 @@
 
 This is the maintained requirements and design reference for the CLI. It preserves the original goal: a small, explicit, deterministic transport and validation layer over Settle Up for agents. Implementation differences and unmet requirements are recorded under [design evolution](#design-evolution-and-open-requirements).
 
-Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.md), [developer setup](DEVELOPMENT.md), [test coverage](Tests.md), and [agent workflow](AGENT_GUIDE.md). The [historical snapshot](design/CLI_SPEC.before-cleanup.md) preserves the full pre-cleanup text; the [initial spec](https://github.com/NewDae/settle-up-cli/blob/9aa02bf/CLI_SPEC.md) remains in Git history.
+Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.md), [developer setup](DEVELOPMENT.md), [test coverage](Tests.md), and [agent workflow](AGENT_GUIDE.md). The [pre-cleanup spec](https://github.com/NewDae/settle-up-cli/blob/78d1e91/CLI_SPEC.md) and the [initial spec](https://github.com/NewDae/settle-up-cli/blob/9aa02bf/CLI_SPEC.md) remain in Git history.
 
 ## Requirements and design principles
 
@@ -152,7 +152,9 @@ Used by:
 | `defaultPermission` | integer (`10`/`20`/`30`) | no | Default permission level assigned to new users added to the group. |
 | `minimizeDebts` | boolean | no | Whether Settle Up should minimize the number of settlement transfers. |
 | `remindOldDebts` | boolean | no | Whether the group should enable reminders for older outstanding debts. |
-| `firstMember` | object | yes | Initial group member representing the creator inside the group ledger; uses MemberInput fields. |
+| `ownerColor` | string | no | Owner color; defaults to `#ec1561`. |
+| `inviteLinkActive` | boolean | no | Whether the group invite link is active; defaults to `true`. |
+| `firstMember` | object | yes | Initial group member representing the creator inside the group ledger; uses MemberInput fields and defaults. |
 
 ---
 
@@ -176,8 +178,8 @@ Used by:
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | Member display name shown in the group. |
-| `active` | boolean | no | Whether the member should be included by default in future transactions. |
-| `defaultWeight` | decimal string | no | Default split weight for this member in new transactions; `"1"` is a normal equal share. |
+| `active` | boolean | no | Whether the member should be included by default in future transactions; defaults to `true`. |
+| `defaultWeight` | decimal string | no | Default split weight for this member in new transactions; `"1"` is a normal equal share and the default. |
 | `photoUrl` | string or `null` | no | Optional avatar URL for the member. |
 | `bankAccount` | string or `null` | no | Optional bank account or payout reference shown for settlement. |
 | `lightningAddress` | string or `null` | no | Optional Lightning payment address for settlement. |
@@ -199,7 +201,7 @@ Example:
 }
 ```
 
-Accepts the same fields and types as [MemberInput](#memberinput), with every field optional. See [patch semantics](#patch-semantics); `null` clears `photoUrl`, `bankAccount`, or `lightningAddress`.
+Accepts the same fields and types as [MemberInput](#memberinput), with every field optional and no defaults applied. See [patch semantics](#patch-semantics); `null` clears `photoUrl`, `bankAccount`, or `lightningAddress`.
 
 ---
 
@@ -310,7 +312,7 @@ These fields are shared by expenses and transfers; only `type` and the payer/rec
 | `currencyCode` | string | yes | ISO currency code of the transaction amounts. |
 | `dateTime` | epoch millis | yes | Timestamp when the transaction occurred. |
 | `timezone` | string | no | Timezone offset of the user creating the transaction, for example `"+05:30"`. |
-| `fixedExchangeRate` | boolean | no | Whether exchange rates were manually fixed instead of auto-derived. |
+| `fixedExchangeRate` | boolean | no | Whether exchange rates were manually fixed instead of auto-derived; defaults to `false` on create. |
 | `exchangeRates` | object<string,string> | no | Optional conversion map from target currency to rate relative to `currencyCode`. |
 | `receiptUrl` | string or `null` | no | Optional URL pointing to a receipt image or document. |
 | `templateId` | string or `null` | no | Optional reference to a recurring or future transaction template. |
@@ -422,6 +424,8 @@ Expected validation:
 - Referenced transaction members exist in the target group. The CLI fetches members for this check before writing.
 - Transaction patches cannot change `type`.
 
+The backend rejects a new member without `active` and `defaultWeight`, and a new transaction without `fixedExchangeRate`, with a 401 "Permission denied" that the CLI would report as `GROUP_ACCESS_DENIED`. Creates therefore fill these documented defaults when they are omitted; supplied values are sent unchanged. Patches never add defaults.
+
 Authentication can refresh before payload validation. The guarantee is validation before the write; zero-request tests use a fresh session. Local tests and their limits are described in [Tests.md](Tests.md).
 
 ## Risks and operating guidance
@@ -453,4 +457,4 @@ The original design principles remain the basis of the CLI. This table preserves
 | Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |
 | Every write command and validation error directs callers to schema help | Implemented for input-taking write validation. Flag-only deletion/recalculation points to command help; auth, configuration, permissions, and service errors give relevant recovery guidance. |
 
-The [historical snapshot](design/CLI_SPEC.before-cleanup.md) retains all earlier wording. Its content is consolidated here as requirements/identity/output/commands/input types/filter/help/validation/risks, in [LOGIN.md](LOGIN.md) as auth/storage, and in [API_REFERENCE.md](API_REFERENCE.md) as endpoint mapping. Implementation correctness should be assessed with [Tests.md](Tests.md), not inferred from the design document alone.
+The [pre-cleanup spec](https://github.com/NewDae/settle-up-cli/blob/78d1e91/CLI_SPEC.md) in Git history retains all earlier wording. Its content is consolidated here as requirements/identity/output/commands/input types/filter/help/validation/risks, in [LOGIN.md](LOGIN.md) as auth/storage, and in [API_REFERENCE.md](API_REFERENCE.md) as endpoint mapping. Implementation correctness should be assessed with [Tests.md](Tests.md), not inferred from the design document alone.

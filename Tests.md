@@ -29,6 +29,7 @@ npm test
 This runs:
 
 - [test/cli-contract.test.mjs](test/cli-contract.test.mjs)
+- [test/cli-credential-storage.test.mjs](test/cli-credential-storage.test.mjs) (see [credential storage](#credential-storage))
 - [test/cli-help.test.mjs](test/cli-help.test.mjs)
 - [test/cli-guidance.test.mjs](test/cli-guidance.test.mjs)
 - [test/negative-inputs.test.mjs](test/negative-inputs.test.mjs)
@@ -43,7 +44,7 @@ What it covers:
 | Error codes and recovery | Actual CLI failures use stable codes. Validation links to the command's schema/help; backend failure guidance preserves status/body details and avoids blind write retries. |
 | Identity model | Auth UID and group member IDs remain separate; the CLI rejects `uid` in payer and recipient references. |
 | Primitive formats | Actual CLI input checks reject numeric amounts/weights, malformed decimal strings, lowercase currency codes, ISO date strings, and timezone names. |
-| Write inputs and discovery | Valid group, member, category, expense, transfer, and patch inputs produce expected HTTP requests. Schema output explains required/optional and nested field types, formats, meanings, and invocation; advertised examples exercise CLI validators. |
+| Write inputs and discovery | Valid group, member, category, expense, transfer, and patch inputs produce expected HTTP requests; creates fill backend-required defaults only when omitted. Schema output explains required/optional and nested field types, formats, meanings, and invocation; advertised examples exercise CLI validators. |
 | Patch requests | The CLI sends only supplied fields, including complete supplied arrays/objects and explicit null clearing; it does not fill in omitted fields. |
 | Negative cases | Malformed write inputs return `INVALID_INPUT` before any backend request with a fresh session. Unknown transaction members are rejected after the member lookup and before any write. |
 | Response mapping | The CLI preserves backend group, permission, user, and userGroup records, adds change IDs, and normalizes debt responses. |
@@ -140,11 +141,11 @@ Group-owned writes depend on permission-first creation; the exact mapping and st
 
 ## Credential storage
 
-`test/cli-credential-storage.test.mjs` runs the real CLI across processes with mocked native storage and strictly offline HTTP responses. It covers login, refresh, logout, store failures and error redaction, verified legacy migration, explicit file storage and Unix permissions, and session isolation by environment, directory, and backend.
+`test/cli-credential-storage.test.mjs` runs the real CLI across processes with mocked native storage and strictly offline HTTP responses. It covers login, refresh, logout, store failures and error redaction, verified legacy migration, corrupt sessions reading as signed out, explicit file storage and Unix permissions (including leaving an existing config directory unchanged), the Windows Credential Manager size limit, and session isolation by environment, directory, and backend.
 
 `npm run test:credentials` exercises the real native OS store using uniquely scoped dummy sessions and mocked HTTP. It never reads the user's normal session or contacts a backend. The dummy credential is deleted after testing. This verifies the CLI integration, not every desktop permission prompt or a security audit of the dependency.
 
-GitHub Actions runs the offline suite and native tests on macOS, Windows, and Linux. Linux starts GNOME Keyring within a D-Bus session, and also tests an unavailable service. To reproduce Linux locally:
+GitHub Actions (`.github/workflows/ci.yml`) runs the offline suite, `docs:check`, and native tests on macOS, Windows, and Linux. Linux starts GNOME Keyring within a D-Bus session, and also tests an unavailable service. To reproduce Linux locally:
 
 ```bash
 docker build -f test/docker/Dockerfile -t settleup-credential-test .

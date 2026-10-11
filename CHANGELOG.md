@@ -13,6 +13,11 @@
 - Errors include command-specific recovery guidance in `error.details.help`.
 - `categories set` rejects category labels that are not strings, including `null`.
 - Optional transaction fields (`category`, `fixedExchangeRate`, `exchangeRates`, `receiptUrl`, `templateId`) are validated before any request is sent.
+- `groups create` validates `ownerColor` (string) and `inviteLinkActive` (boolean).
+
+### Fixed
+
+- Creating a member (`members add`, or the first member in `groups create`) without `active` or `defaultWeight`, or a transaction without `fixedExchangeRate`, failed with `GROUP_ACCESS_DENIED` because the backend requires those fields. The CLI now fills the defaults `true`, `"1"`, and `false` when they are omitted.
 
 ### Added
 

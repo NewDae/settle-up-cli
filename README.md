@@ -16,6 +16,8 @@ settleup groups list
 
 Sign in with your Settle Up email and password. The password is hidden while you type, and the CLI refreshes your session automatically. No API key, environment file, or backend setup is needed.
 
+Your session is kept in your operating system's credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service (GNOME Keyring or KWallet). Your password is never saved. On a server or container without a credential store, set `SETTLEUP_AUTH_STORAGE=file` to opt into a plaintext session file instead; see the [login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#credential-storage).
+
 **Google, Apple, or another sign-in method?** First [migrate your account to email/password](https://settleup.app/migrate-account). Email/password is the only supported login method.
 
 ## Use with your AI agent
@@ -75,15 +77,16 @@ npm install -g settle-up-cli@latest
 settleup auth logout
 ```
 
-Commands return JSON. `ok: true` means success; `ok: false` includes an error code and message, and exits with a nonzero status. If authentication expires, sign in again. If a request is rate limited, wait before retrying.
+Commands return JSON. `ok: true` means success; `ok: false` includes an error code and message, and exits with a nonzero status. If authentication expires, sign in again. `AUTH_STORAGE_FAILED` means the credential store is locked or unavailable: unlock it and retry, or choose file storage as described above. If a request is rate limited, wait before retrying.
 
 ## Documentation
 
 - [Agent guide](https://github.com/NewDae/settle-up-cli/blob/main/AGENT_GUIDE.md): installation and operating workflow for shell-capable agents.
 - [CLI specification](https://github.com/NewDae/settle-up-cli/blob/main/CLI_SPEC.md): requirements, design principles, commands, and input fields.
-- [Login reference](LOGIN.md): sign-in, configuration, and session storage.
+- [Login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md): sign-in, configuration, and session storage.
 - [Developer guide](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md): source setup and repository layout.
 - [Test strategy](https://github.com/NewDae/settle-up-cli/blob/main/Tests.md): test commands, coverage, and limits.
 - [API reference](https://github.com/NewDae/settle-up-cli/blob/main/API_REFERENCE.md): backend endpoint mapping.
+- [Changelog](https://github.com/NewDae/settle-up-cli/blob/main/CHANGELOG.md): what changed in each release.
 
 For source code, contribution information, and developer documentation, visit [the GitHub repository](https://github.com/NewDae/settle-up-cli) and its [developer guide](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md). If the CLI helps you, [give it a star](https://github.com/NewDae/settle-up-cli).
