@@ -2,7 +2,7 @@
 
 This is the maintained requirements and design reference for the CLI. It preserves the original goal: a small, explicit, deterministic transport and validation layer over Settle Up for agents. Implementation differences and unmet requirements are recorded under [design evolution](#design-evolution-and-open-requirements).
 
-Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.md), [developer setup](DEVELOPMENT.md), [test coverage](Tests.md), and [agent workflow](AGENT_GUIDE.md). The [historical snapshot](design/CLI_SPEC.before-cleanup.md) preserves the full pre-cleanup text; the [initial spec](https://github.com/NewDae/settle-up-cli/blob/9aa02bf/CLI_SPEC.md) remains in Git history.
+Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.md), [developer setup](DEVELOPMENT.md), [test coverage](Tests.md), and [agent workflow](AGENT_GUIDE.md). The [pre-cleanup spec](https://github.com/NewDae/settle-up-cli/blob/78d1e91/CLI_SPEC.md) and the [initial spec](https://github.com/NewDae/settle-up-cli/blob/9aa02bf/CLI_SPEC.md) remain in Git history.
 
 ## Requirements and design principles
 
@@ -453,4 +453,4 @@ The original design principles remain the basis of the CLI. This table preserves
 | Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |
 | Every write command and validation error directs callers to schema help | Implemented for input-taking write validation. Flag-only deletion/recalculation points to command help; auth, configuration, permissions, and service errors give relevant recovery guidance. |
 
-The [historical snapshot](design/CLI_SPEC.before-cleanup.md) retains all earlier wording. Its content is consolidated here as requirements/identity/output/commands/input types/filter/help/validation/risks, in [LOGIN.md](LOGIN.md) as auth/storage, and in [API_REFERENCE.md](API_REFERENCE.md) as endpoint mapping. Implementation correctness should be assessed with [Tests.md](Tests.md), not inferred from the design document alone.
+The [pre-cleanup spec](https://github.com/NewDae/settle-up-cli/blob/78d1e91/CLI_SPEC.md) in Git history retains all earlier wording. Its content is consolidated here as requirements/identity/output/commands/input types/filter/help/validation/risks, in [LOGIN.md](LOGIN.md) as auth/storage, and in [API_REFERENCE.md](API_REFERENCE.md) as endpoint mapping. Implementation correctness should be assessed with [Tests.md](Tests.md), not inferred from the design document alone.

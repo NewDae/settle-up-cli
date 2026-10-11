@@ -100,7 +100,6 @@ CI (`.github/workflows/ci.yml`) runs the offline suite, `docs:check` and the nat
 | [DEVELOPMENT.md](../DEVELOPMENT.md) | Running from source, environment setup and repository map |
 | [Tests.md](../Tests.md) | Test layers, commands, coverage and limitations |
 | [CHANGELOG.md](../CHANGELOG.md) | Release notes |
-| [design/](../design/) | Frozen historical spec; not a current contract |
 
 ## Contributing
 

@@ -75,8 +75,9 @@ For additional tasks, use `settleup --help` or `<command> --help`. This CLI is a
 
 ## If something goes wrong
 
-Read stdout as JSON: success is `{ "ok": true, "data": ..., "meta": ... }`; failure is `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }` with a nonzero exit code. Interactive login prompts go to stderr.
+Read stdout as JSON: success is `{ "ok": true, "data": ..., "meta": ... }`; failure is `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }` with a nonzero exit code. Interactive login prompts go to stderr. Every error includes `error.details.help` with the next step to take; follow it before retrying.
 
+- INVALID_INPUT: fix the payload or flags using the `settleup schema` or `--help` command named in `details.help`. Nothing was written.
 - AUTH_REQUIRED / AUTH_REFRESH_FAILED: ask the user to sign in privately again.
 - AUTH_STORAGE_FAILED: ask the user to unlock or enable the OS credential store. Plaintext storage requires their explicit choice; never silently switch it.
 - AUTH_INVALID: check email/password sign-in and account migration.

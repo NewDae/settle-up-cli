@@ -79,7 +79,6 @@ npm run docs:check
 | `Tests.md` | Test commands, coverage, and limitations. |
 | `AGENT_GUIDE.md` | Canonical agent installation and operating workflow. |
 | `docs/` | Website and generated agent guide copies. |
-| `design/CLI_SPEC.before-cleanup.md` | Frozen historical spec; not maintained as a current contract. |
 
 ## Open source
 
