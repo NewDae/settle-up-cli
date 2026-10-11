@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cliPath = path.join(repoRoot, 'bin', 'settleup.mjs');
@@ -146,7 +146,7 @@ globalThis.fetch = async (url, options = {}) => {
   return {
     baseUrl: 'https://mock-settleup.test',
     env: {
-      NODE_OPTIONS: `--import ${modulePath}`,
+      NODE_OPTIONS: `--import ${pathToFileURL(modulePath).href}`,
       SETTLEUP_MOCK_LOG: logPath,
     },
     requests: () => {

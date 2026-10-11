@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('../../bin/settleup.mjs', import.meta.url));
-const hook = fileURLToPath(new URL('./credential-hook.mjs', import.meta.url));
+const hook = new URL('./credential-hook.mjs', import.meta.url).href;
 export const session = {
   accessToken: 'dummy-access', idToken: 'dummy-access', refreshToken: 'dummy-refresh',
   uid: 'dummy-user', email: 'dummy@example.invalid', expiresAt: Date.now() + 3_600_000,
