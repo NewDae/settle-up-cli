@@ -2,18 +2,9 @@
 
 This file documents the auth wrapper and Settle Up backend paths used by the `settleup` CLI. The CLI behavior and JSON contracts are defined in [CLI_SPEC.md](CLI_SPEC.md); this file explains the backend paths behind those commands.
 
-## Config
+## Configuration
 
-Runtime config:
-
-```text
-SETTLEUP_ENV              = production | staging | test
-SETTLEUP_API_BASE_URL     = optional Settle Up API/database URL override
-SETTLEUP_AUTH_BASE_URL    = optional hosted auth endpoint override
-SETTLEUP_FIREBASE_API_KEY = optional direct Firebase Auth key for local/staging/internal use
-```
-
-The published package uses production defaults, so normal users do not need runtime config. The open-source CLI does not ship a Firebase API key. Local development, staging, or trusted internal production runs can provide `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` through `.env` when direct Firebase Auth is needed.
+[LOGIN.md](LOGIN.md#configuration-reference) owns runtime configuration, precedence, token storage, and hosted/direct-auth selection. Database calls use the configured URL or packaged production default. Non-production requires explicit configuration.
 
 ## Auth Endpoints
 
@@ -22,9 +13,16 @@ The published package uses production defaults, so normal users do not need runt
 | Login | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/login` when overridden |
 | Refresh token | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/refresh` when overridden |
 
-The auth wrapper handles Firebase auth. The CLI stores `accessToken`, `refreshToken`, `uid`, `email`, and `expiresAt` locally after login. Authenticated backend calls pass the current access token as `?auth=<accessToken>`.
+The auth wrapper handles Firebase auth. Authenticated backend calls pass the current access token as `?auth=<accessToken>`; [LOGIN.md](LOGIN.md) describes the returned session fields and refresh flow.
 
-When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI bypasses hosted auth and signs in directly through Firebase Auth. Database paths still use `SETTLEUP_API_BASE_URL` or the packaged production default.
+When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI bypasses hosted auth:
+
+| Purpose | Method | Direct Firebase endpoint |
+|---|---|---|
+| Password sign-in | `POST` | `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<API_KEY>` |
+| Token refresh | `POST` | `https://securetoken.googleapis.com/v1/token?key=<API_KEY>` |
+
+Database paths still use the database URL, independently of the auth URL.
 
 ## Backend Paths
 
@@ -83,16 +81,7 @@ Backend paths are under:
 
 `POST /groups` is not used because permissions must exist before group metadata is writable.
 
-The CLI therefore uses a client-generated `groupId` and this order:
-
-1. `PUT /permissions/<groupId>/<uid>`
-2. `GET /groups/<groupId>` to observe the generated group stub
-3. `PATCH /groups/<groupId>`
-4. `POST /members/<groupId>`
-5. `PUT /userGroups/<uid>/<groupId>`
-6. `PUT /users/<uid>/currentTabId`
-
-This is the same flow covered by the integration tests.
+The CLI generates the group ID before the permission write. That write creates a minimal group stub containing invite metadata; the CLI reads it and patches group fields rather than replacing the stub. The mapping table above records the complete write order, including member creation, user-group linkage, and current-tab update. This flow is exercised by request tests and the live integration workflow.
 
 ## Debt And Settlement Notes
 
@@ -110,13 +99,7 @@ To refresh derived debts, the CLI posts:
 
 to `/serverTasks/calculateDebts`.
 
-Debt settlement is represented as a `transfer` transaction:
-
-- debtor/sender is in `whoPaid`
-- creditor/receiver is in `items[].forWhom`
-- the transfer amount is the settlement amount
-
-The CLI does not mutate `/debts/<groupId>` directly.
+The CLI does not mutate `/debts/<groupId>` directly. Settlement uses the transfer input described in [CLI_SPEC.md](CLI_SPEC.md#transferinput).
 
 ## Backend Notes
 

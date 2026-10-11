@@ -4,7 +4,7 @@ This project tests the CLI in three layers:
 
 | Layer | Command | Purpose |
 |---|---|---|
-| Local deterministic suite | `npm test` | Fast, no-network checks for CLI output, JSON contracts, and invalid inputs. |
+| Local deterministic suite | `npm test` | Runs the real CLI; scripted HTTP responses verify validation, output, and outgoing requests without network access. |
 | Live backend suite | `npm run test:live` | Verifies configured staging backend behavior against real APIs. |
 | CLI end-to-end workflow | `npm run integration:e2e` | Exercises the actual CLI through a full staging user journey and writes a report. |
 
@@ -30,6 +30,7 @@ This runs:
 
 - [test/cli-contract.test.mjs](test/cli-contract.test.mjs)
 - [test/cli-help.test.mjs](test/cli-help.test.mjs)
+- [test/cli-guidance.test.mjs](test/cli-guidance.test.mjs)
 - [test/negative-inputs.test.mjs](test/negative-inputs.test.mjs)
 - [test/spec-contracts.test.mjs](test/spec-contracts.test.mjs)
 
@@ -39,15 +40,18 @@ What it covers:
 |---|---|
 | CLI executable behavior | Help, schema output, auth status without a session, auth-required errors, and unknown-command errors. |
 | JSON envelopes | Success and error responses keep the documented `ok`, `data` or `error`, and `meta.environment` shape. |
-| Error codes | The allowed error code list remains stable. |
-| Identity model | Fixtures and nested transaction references do not mix `uid` and `memberId`. |
-| Primitive formats | Amounts and weights are decimal strings; currency codes are `A-Z{3}`; dates are epoch millis; timezones are offsets. |
-| Write inputs | Group, member, category, expense, transfer, transaction patch, and server task payloads match the CLI spec. |
-| Patch behavior | Omitted fields remain unchanged; provided arrays and objects replace the stored value. |
-| Negative cases | Malformed inputs such as numeric weights, lowercase currency codes, ISO date strings, empty split arrays, and missing wrappers are rejected. |
-| Entity samples | Group, permission, user, userGroup, change, and debts examples match the published API shapes. |
+| Error codes and recovery | Actual CLI failures use stable codes. Validation links to the command's schema/help; backend failure guidance preserves status/body details and avoids blind write retries. |
+| Identity model | Auth UID and group member IDs remain separate; the CLI rejects `uid` in payer and recipient references. |
+| Primitive formats | Actual CLI input checks reject numeric amounts/weights, malformed decimal strings, lowercase currency codes, ISO date strings, and timezone names. |
+| Write inputs and discovery | Valid group, member, category, expense, transfer, and patch inputs produce expected HTTP requests. Schema output explains required/optional and nested field types, formats, meanings, and invocation; advertised examples exercise CLI validators. |
+| Patch requests | The CLI sends only supplied fields, including complete supplied arrays/objects and explicit null clearing; it does not fill in omitted fields. |
+| Negative cases | Malformed write inputs return `INVALID_INPUT` before any backend request with a fresh session. Unknown transaction members are rejected after the member lookup and before any write. |
+| Response mapping | The CLI preserves backend group, permission, user, and userGroup records, adds change IDs, and normalizes debt responses. |
+| Server task | Debt recalculation constructs `{ request: { groupId } }`; a missing group ID is rejected locally. |
 
-Most contract logic lives in [test/helpers/spec-validators.mjs](test/helpers/spec-validators.mjs), with reusable fixtures in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). These helpers are not run as standalone tests in the default command.
+Reusable inputs and backend response samples live in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). [test/helpers/cli-harness.mjs](test/helpers/cli-harness.mjs) launches the executable with isolated configuration and a fresh test session, captures outgoing requests, and supplies scripted responses. Unexpected requests fail; temporary files are removed after each run. Validation lives in the CLI, with no parallel test-only implementation.
+
+These local tests verify what the wrapper sends and returns. They do not prove backend persistence, permissions, debt calculation, or how the backend applies a PATCH. Those behaviors require live backend checks; see the live-suite coverage and end-to-end limitations below.
 
 ## Live Backend Suite
 
@@ -100,7 +104,7 @@ Run:
 npm run integration:e2e
 ```
 
-This uses the configured staging API, logs in through the CLI, creates a group and members, exercises expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, changes, and logout.
+This uses the configured API/environment (see environment selection below), creates a temporary account using a locally supplied Firebase key, logs in through the CLI, creates a group and members, exercises expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, changes, and logout.
 
 Each run writes a dated report to:
 
@@ -110,13 +114,22 @@ integration-reports/cli-integration-<date>.md
 
 The report includes each command, its JSON output, and a one-line pass check.
 
-## Staging Assumptions
+The workflow checks that the server debt endpoint returns an array. Settlement amounts and the final zero-balance assertion use the runner's own calculation from transactions; they do not independently verify the server's debt amounts.
 
-- The suite uses `SETTLEUP_API_BASE_URL`, `SETTLEUP_FIREBASE_API_KEY`, and local `.env`/shell config.
-- The CLI does not commit Firebase API keys.
-- Auth login goes directly through Firebase Auth when `SETTLEUP_FIREBASE_API_KEY` is set. Hosted-auth tests can use `SETTLEUP_AUTH_BASE_URL` when needed.
-- Group-owned writes need a permission record first. The stable create flow is permission write, `PATCH /groups/<groupId>`, member create, and `/userGroups/<uid>/<groupId>` link.
-- The CLI uses a client-generated group id so permissions can be created before group metadata is patched.
+## Environment selection
+
+Use [developer environment setup](DEVELOPMENT.md#environment-setup) for config files and precedence, and [LOGIN.md](LOGIN.md#configuration-reference) for auth selection. The raw live suite needs exported staging API and Firebase key variables; the E2E runner loads `.env` by default.
+
+For explicit E2E config files:
+
+```bash
+npm run integration:e2e:staging  # loads .env.staging
+npm run integration:e2e:prod     # loads .env.production
+```
+
+These are real write workflows. The production command creates records in the configured production backend; use staging for routine validation. No environment is inferred from a URL alone.
+
+Group-owned writes depend on permission-first creation; the exact mapping and stub rationale live in [API_REFERENCE.md](API_REFERENCE.md#group-creation-notes).
 
 ## Reference Docs
 

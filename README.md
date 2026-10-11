@@ -77,4 +77,13 @@ settleup auth logout
 
 Commands return JSON. `ok: true` means success; `ok: false` includes an error code and message, and exits with a nonzero status. If authentication expires, sign in again. If a request is rate limited, wait before retrying.
 
+## Documentation
+
+- [Agent guide](https://github.com/NewDae/settle-up-cli/blob/main/AGENT_GUIDE.md): installation and operating workflow for shell-capable agents.
+- [CLI specification](https://github.com/NewDae/settle-up-cli/blob/main/CLI_SPEC.md): requirements, design principles, commands, and input fields.
+- [Login reference](LOGIN.md): sign-in, configuration, and session storage.
+- [Developer guide](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md): source setup and repository layout.
+- [Test strategy](https://github.com/NewDae/settle-up-cli/blob/main/Tests.md): test commands, coverage, and limits.
+- [API reference](https://github.com/NewDae/settle-up-cli/blob/main/API_REFERENCE.md): backend endpoint mapping.
+
 For source code, contribution information, and developer documentation, visit [the GitHub repository](https://github.com/NewDae/settle-up-cli) and its [developer guide](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md). If the CLI helps you, [give it a star](https://github.com/NewDae/settle-up-cli).
