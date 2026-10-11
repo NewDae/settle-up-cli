@@ -112,9 +112,9 @@ The report includes each command, its JSON output, and a one-line pass check.
 
 ## Staging Assumptions
 
-- The suite uses `SETTLEUP_API_BASE_URL` and local `.env`/shell config.
+- The suite uses `SETTLEUP_API_BASE_URL`, `SETTLEUP_FIREBASE_API_KEY`, and local `.env`/shell config.
 - The CLI does not commit Firebase API keys.
-- Auth login goes through `<SETTLEUP_API_BASE_URL>/auth/login`.
+- Auth login goes directly through Firebase Auth when `SETTLEUP_FIREBASE_API_KEY` is set. Hosted-auth tests can use `SETTLEUP_AUTH_BASE_URL` when needed.
 - Group-owned writes need a permission record first. The stable create flow is permission write, `PATCH /groups/<groupId>`, member create, and `/userGroups/<uid>/<groupId>` link.
 - The CLI uses a client-generated group id so permissions can be created before group metadata is patched.
 

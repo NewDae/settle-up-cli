@@ -20,6 +20,7 @@ function runCli(args, { input } = {}) {
       SETTLEUP_CLI_CONFIG_DIR: configDir,
       SETTLEUP_ENV: 'test',
       SETTLEUP_API_BASE_URL: '',
+      SETTLEUP_AUTH_BASE_URL: '',
       SETTLEUP_FIREBASE_API_KEY: '',
     },
   });
@@ -208,6 +209,8 @@ test('schema command returns write-input examples as JSON', () => {
 test('auth login calls the configured auth wrapper and stores staging session separately', async () => {
   const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-auth-'));
   const mock = createFetchMock();
+  const apiBaseUrl = `${mock.baseUrl}/db`;
+  const authBaseUrl = `${mock.baseUrl}/auth-service`;
 
   const result = await runCliAsync(['auth', 'login'], {
     input: 'me@example.com\nsecret\n',
@@ -215,7 +218,8 @@ test('auth login calls the configured auth wrapper and stores staging session se
       ...mock.env,
       SETTLEUP_CLI_CONFIG_DIR: configDir,
       SETTLEUP_ENV: 'staging',
-      SETTLEUP_API_BASE_URL: mock.baseUrl,
+      SETTLEUP_API_BASE_URL: apiBaseUrl,
+      SETTLEUP_AUTH_BASE_URL: authBaseUrl,
       SETTLEUP_FIREBASE_API_KEY: '',
     },
   });
@@ -224,8 +228,9 @@ test('auth login calls the configured auth wrapper and stores staging session se
   assert.equal(result.output.ok, true);
   assert.equal(result.output.data.uid, 'u1');
   const requests = mock.requests();
-  assert.equal(requests[0].url, `${mock.baseUrl}/auth/login`);
+  assert.equal(requests[0].url, `${authBaseUrl}/auth/login`);
   assert.deepEqual(requests[0].body, { email: 'me@example.com', password: 'secret' });
+  assert.equal(requests[1].url, `${apiBaseUrl}/users/u1.json?auth=token-1`);
 
   const authPath = path.join(configDir, 'staging', 'auth.json');
   const auth = JSON.parse(readFileSync(authPath, 'utf8'));
@@ -240,8 +245,50 @@ test('auth login calls the configured auth wrapper and stores staging session se
   assert.equal(productionStatus.output.data.authenticated, false);
 });
 
+test('production login works from a clean directory without user configuration', async () => {
+  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-default-auth-'));
+  const cwd = mkdtempSync(path.join(tmpdir(), 'settleup-cli-default-cwd-'));
+  const mock = createFetchMock();
+  const result = await runCliAsync(['auth', 'login'], {
+    cwd,
+    input: 'me@example.com\nsecret\n',
+    env: {
+      ...mock.env,
+      SETTLEUP_CLI_CONFIG_DIR: configDir,
+      SETTLEUP_ENV: 'production',
+      SETTLEUP_API_BASE_URL: '',
+      SETTLEUP_AUTH_BASE_URL: '',
+      SETTLEUP_FIREBASE_API_KEY: '',
+    },
+  });
+  assert.equal(result.status, 0, JSON.stringify(result.output));
+  const requests = mock.requests();
+  assert.equal(requests[0].url, 'https://settleup-production.newdae.workers.dev/auth/login');
+  assert.equal(requests[1].url, 'https://settle-up-live.firebaseio.com/users/u1.json?auth=token-1');
+});
+
+test('unconfigured staging login fails before reaching production', async () => {
+  const mock = createFetchMock();
+  const result = await runCliAsync(['auth', 'login'], {
+    input: 'me@example.com\nsecret\n',
+    env: {
+      ...mock.env,
+      SETTLEUP_ENV: 'staging',
+      SETTLEUP_API_BASE_URL: '',
+      SETTLEUP_AUTH_BASE_URL: '',
+      SETTLEUP_FIREBASE_API_KEY: '',
+    },
+  });
+  assert.equal(result.status, 1);
+  assert.equal(result.output.error.code, 'INVALID_INPUT');
+  assert.deepEqual(mock.requests(), []);
+});
+
 test('expired sessions refresh through the auth wrapper before backend access', async () => {
   const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-refresh-'));
+  const mock = createFetchMock();
+  const apiBaseUrl = `${mock.baseUrl}/db`;
+  const authBaseUrl = `${mock.baseUrl}/auth-service`;
   const authDir = path.join(configDir, 'staging');
   mkdirSync(authDir, { recursive: true });
   writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({
@@ -252,14 +299,13 @@ test('expired sessions refresh through the auth wrapper before backend access', 
     expiresAt: Date.now() - 1000,
   }));
 
-  const mock = createFetchMock();
-
   const result = await runCliAsync(['users', 'me'], {
     env: {
       ...mock.env,
       SETTLEUP_CLI_CONFIG_DIR: configDir,
       SETTLEUP_ENV: 'staging',
-      SETTLEUP_API_BASE_URL: mock.baseUrl,
+      SETTLEUP_API_BASE_URL: apiBaseUrl,
+      SETTLEUP_AUTH_BASE_URL: authBaseUrl,
       SETTLEUP_FIREBASE_API_KEY: '',
     },
   });
@@ -267,8 +313,8 @@ test('expired sessions refresh through the auth wrapper before backend access', 
   assert.equal(result.status, 0, JSON.stringify(result.output));
   assert.equal(result.output.data.uid, 'u1');
   const requests = mock.requests();
-  assert.equal(requests[0].url, `${mock.baseUrl}/auth/refresh`);
-  assert.equal(requests[1].url, `${mock.baseUrl}/users/u1.json?auth=new-token`);
+  assert.equal(requests[0].url, `${authBaseUrl}/auth/refresh`);
+  assert.equal(requests[1].url, `${apiBaseUrl}/users/u1.json?auth=new-token`);
 });
 
 test('.env local development uses Firebase auth directly and shell env wins', async () => {

@@ -3,12 +3,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
+import { Writable } from 'node:stream';
 import { stdin as input, stderr as promptOutput } from 'node:process';
 
 loadDotEnv();
 
 const ENVIRONMENT = process.env.SETTLEUP_ENV || 'production';
-const API_BASE_URL = (process.env.SETTLEUP_API_BASE_URL || '').replace(/\/$/, '');
+const DEFAULT_API_BASE_URL = ENVIRONMENT === 'production' ? 'https://settle-up-live.firebaseio.com' : '';
+const DEFAULT_AUTH_BASE_URL = ENVIRONMENT === 'production' ? 'https://settleup-production.newdae.workers.dev' : '';
+const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+const API_BASE_URL = (process.env.SETTLEUP_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '');
+const AUTH_BASE_URL = (process.env.SETTLEUP_AUTH_BASE_URL || DEFAULT_AUTH_BASE_URL || API_BASE_URL).replace(/\/$/, '');
 const FIREBASE_API_KEY = process.env.SETTLEUP_FIREBASE_API_KEY || '';
 const CONFIG_DIR = process.env.SETTLEUP_CLI_CONFIG_DIR
   || path.join(os.homedir(), '.config', 'settleup-cli');
@@ -78,9 +83,25 @@ function requireApiBaseUrl() {
   return API_BASE_URL;
 }
 
+function requireAuthBaseUrl() {
+  if (!AUTH_BASE_URL) {
+    throw Object.assign(new Error('Missing SETTLEUP_AUTH_BASE_URL or SETTLEUP_API_BASE_URL; set one in the environment or local .env'), {
+      cliCode: 'INVALID_INPUT',
+      details: { variable: 'SETTLEUP_AUTH_BASE_URL', environment: ENVIRONMENT },
+    });
+  }
+  return AUTH_BASE_URL;
+}
+
 function apiUrl(apiPath) {
   const base = requireApiBaseUrl();
   const clean = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
+  return `${base}${clean}`;
+}
+
+function authUrl(authPath) {
+  const base = requireAuthBaseUrl();
+  const clean = authPath.startsWith('/') ? authPath : `/${authPath}`;
   return `${base}${clean}`;
 }
 
@@ -142,6 +163,37 @@ function readAuthFile() {
 function writeAuthFile(auth) {
   ensureConfigDir();
   fs.writeFileSync(AUTH_PATH, JSON.stringify(auth, null, 2), { mode: 0o600 });
+  if (process.platform !== 'win32') fs.chmodSync(AUTH_PATH, 0o600);
+}
+
+async function promptCredentials() {
+  let hideOutput = false;
+  const output = new Writable({
+    write(chunk, encoding, callback) {
+      if (!hideOutput) promptOutput.write(chunk, encoding);
+      callback();
+    },
+  });
+  const rl = readline.createInterface({ input, output, terminal: true });
+  const controller = new AbortController();
+  rl.once('SIGINT', () => controller.abort());
+  rl.once('close', () => controller.abort());
+  try {
+    const email = await rl.question('Email: ', { signal: controller.signal });
+    promptOutput.write('Password: ');
+    hideOutput = true;
+    const password = await rl.question('', { signal: controller.signal });
+    return { email, password };
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw Object.assign(new Error('Login cancelled'), { cliCode: 'INVALID_INPUT' });
+    }
+    throw error;
+  } finally {
+    hideOutput = false;
+    promptOutput.write('\n');
+    rl.close();
+  }
 }
 
 function deleteAuthFile() {
@@ -220,11 +272,11 @@ async function refreshWithFirebase(refreshToken) {
 async function refreshAuth(auth) {
   const json = FIREBASE_API_KEY
     ? await refreshWithFirebase(auth.refreshToken)
-    : await fetchApiData('/auth/refresh', {
+    : unwrapApiEnvelope(await fetchJson(authUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ refreshToken: auth.refreshToken }),
-    });
+    }));
   const accessToken = json.accessToken || json.idToken;
   const next = {
     ...auth,
@@ -891,6 +943,7 @@ async function ensureUserRecord(auth) {
 async function main() {
   const { positional, flags } = parseArgs(process.argv.slice(2));
   const [group, command] = positional;
+  if (flags.version) return printJson(ok({ version: VERSION }));
   if (flags.help || group === '--help' || !group) return printJson(ok({ help: helpText(group, command) }));
 
   if (group === 'schema') {
@@ -903,10 +956,7 @@ async function main() {
     let email;
     let password;
     if (input.isTTY) {
-      const rl = readline.createInterface({ input, output: promptOutput });
-      email = await rl.question('Email: ');
-      password = await rl.question('Password: ');
-      rl.close();
+      ({ email, password } = await promptCredentials());
     } else {
       const [emailLine, passwordLine] = fs.readFileSync(0, 'utf8').split(/\r?\n/);
       email = emailLine;
@@ -916,11 +966,11 @@ async function main() {
     assertNonEmptyString(password, 'password');
     const json = FIREBASE_API_KEY
       ? await signInWithFirebase(email, password)
-      : await fetchApiData('/auth/login', {
+      : unwrapApiEnvelope(await fetchJson(authUrl('/auth/login'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),
-      });
+      }));
     const accessToken = json.accessToken || json.idToken;
     const auth = {
       accessToken,

@@ -8,20 +8,23 @@ Runtime config:
 
 ```text
 SETTLEUP_ENV              = production | staging | test
-SETTLEUP_API_BASE_URL     = Settle Up API base URL
-SETTLEUP_FIREBASE_API_KEY = optional local/staging development Firebase Web API key
+SETTLEUP_API_BASE_URL     = optional Settle Up API/database URL override
+SETTLEUP_AUTH_BASE_URL    = optional hosted auth endpoint override
+SETTLEUP_FIREBASE_API_KEY = optional direct Firebase Auth key for local/staging/internal use
 ```
 
-The open-source CLI does not ship a Firebase API key. Local development can provide one through `.env` when the configured auth wrapper requires it.
+The published package uses production defaults, so normal users do not need runtime config. The open-source CLI does not ship a Firebase API key. Local development, staging, or trusted internal production runs can provide `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` through `.env` when direct Firebase Auth is needed.
 
 ## Auth Endpoints
 
 | Purpose | Method | Endpoint |
 |---|---|---|
-| Login | `POST` | `<SETTLEUP_API_BASE_URL>/auth/login` |
-| Refresh token | `POST` | `<SETTLEUP_API_BASE_URL>/auth/refresh` |
+| Login | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/login` when overridden |
+| Refresh token | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/refresh` when overridden |
 
 The auth wrapper handles Firebase auth. The CLI stores `accessToken`, `refreshToken`, `uid`, `email`, and `expiresAt` locally after login. Authenticated backend calls pass the current access token as `?auth=<accessToken>`.
+
+When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI bypasses hosted auth and signs in directly through Firebase Auth. Database paths still use `SETTLEUP_API_BASE_URL` or the packaged production default.
 
 ## Backend Paths
 

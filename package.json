@@ -1,6 +1,19 @@
 {
   "name": "settle-up-cli",
-  "private": true,
+  "version": "0.1.0",
+  "description": "A JSON-first Settle Up CLI for people and AI agents: groups, expenses, transfers, and debts.",
+  "license": "MIT",
+  "author": "Anshul Ravikumar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NewDae/settle-up-cli.git"
+  },
+  "homepage": "https://newdae.github.io/settle-up-cli/",
+  "bugs": { "url": "https://github.com/NewDae/settle-up-cli/issues" },
+  "engines": { "node": ">=22" },
+  "keywords": ["settleup", "cli", "expenses", "split-bills", "agents"],
+  "files": ["bin/", "README.md", "LOGIN.md", "AGENT_GUIDE.md", "CLI_SPEC.md", "API_REFERENCE.md", "LICENSE"],
+  "publishConfig": { "access": "public" },
   "type": "module",
   "bin": {
     "settleup": "./bin/settleup.mjs"

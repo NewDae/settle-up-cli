@@ -22,32 +22,43 @@ Deterministic JSON-only CLI for Settle Up. The installed command is `settleup`.
 
 ## Requirements
 
-- Node.js 18 or newer.
+- Node.js 22 or newer.
 - Network access to the configured Settle Up API for live CLI usage.
-- No npm package install is required; the CLI uses built-in Node APIs only.
+- The CLI has no runtime dependencies; it uses built-in Node APIs only.
 
-## Install And Run
+## Install and sign in
 
-This path gets the CLI up and running from a local checkout.
+```bash
+npm install -g settle-up-cli
+settleup auth login
+settleup groups list
+```
 
-Clone the repo:
+Production database and hosted auth endpoints are built in. You do not need Firebase keys, a `.env` file, or your own backend. Login prompts for your email/password and hides your password while you type.
+
+**Use Google, Apple, or another sign-in method?** This CLI supports email/password. First [migrate your Settle Up account to email/password](https://settleup.app/migrate-account), then run `settleup auth login`.
+
+```bash
+settleup --help
+settleup --version
+settleup schema expenses.create
+```
+
+For updates, run `npm install -g settle-up-cli@latest` again.
+
+## For AI agents
+
+Read [AGENT_GUIDE.md](AGENT_GUIDE.md) for authentication, command discovery, JSON output, ID handling, write payloads, and error recovery. Users should sign in in their own terminal; never paste passwords or session tokens into an agent conversation.
+
+The CLI works with shell-capable agents. It is not an MCP server.
+
+## Run from source
 
 ```bash
 git clone https://github.com/NewDae/settle-up-cli.git
 cd settle-up-cli
-```
-
-Run directly with Node:
-
-```bash
 node bin/settleup.mjs --help
-```
-
-Optionally link the command locally:
-
-```bash
 npm link
-settleup --help
 ```
 
 ## Local Dev And Testing Config
@@ -73,7 +84,7 @@ SETTLEUP_API_BASE_URL=https://<staging-settle-up-api>
 SETTLEUP_FIREBASE_API_KEY=<staging-firebase-api-key>
 ```
 
-`SETTLEUP_FIREBASE_API_KEY` is only for local/staging development. Normal users do not need Firebase keys, a local Worker, or a local backend.
+`SETTLEUP_FIREBASE_API_KEY` is only for local/staging development or trusted internal runs. Normal users of the published package do not need to configure URLs, Firebase keys, or a local backend. Published-package login options are documented in [LOGIN.md](LOGIN.md).
 
 Run E2E against a specific environment:
 
@@ -88,7 +99,7 @@ Real shell environment variables override env-file values.
 
 | Command | What it does |
 |---|---|
-| `settleup auth login` | Signs in through `<SETTLEUP_API_BASE_URL>/auth/login` and stores a local session. |
+| `settleup auth login` | Signs in through hosted auth, or direct Firebase Auth when `SETTLEUP_FIREBASE_API_KEY` is set. |
 | `settleup auth status` | Shows whether a local session exists. |
 | `settleup users me` | Reads the current app-level user profile. |
 | `settleup groups list` | Lists groups visible to the logged-in user. |
@@ -137,7 +148,7 @@ Known implementation notes:
 
 ## Tests
 
-[Tests.md](Tests.md) has the fuller test overview, including what each test layer checks and the exact commands to run them.
+[Tests.md](https://github.com/NewDae/settle-up-cli/blob/main/Tests.md) has the fuller test overview, including what each test layer checks and the exact commands to run them.
 
 Offline contract tests:
 
@@ -177,3 +188,7 @@ CLI_SPEC.md                       CLI contract and API mapping
 API_REFERENCE.md                  Backend endpoints and path mapping
 Tests.md                          Test coverage notes and commands
 ```
+
+## Open source
+
+An independent community integration, not an official Settle Up client. Released under the [MIT license](LICENSE). If it helps you, [star the repository](https://github.com/NewDae/settle-up-cli).

@@ -72,7 +72,8 @@ Rules:
 
 - code
 - command schemas and validation
-- production/staging API URL configuration through environment or `.env`
+- production API and hosted auth defaults for the published package
+- API URL and Firebase key overrides through environment or `.env` for local/staging/internal use
 
 ### What the CLI must not ship with
 
@@ -86,14 +87,14 @@ Rules:
 Hosted user flow:
 
 1. user runs `auth login`
-2. CLI calls `<SETTLEUP_API_BASE_URL>/auth/login`
-3. auth wrapper handles Firebase auth
+2. CLI calls the packaged hosted auth endpoint
+3. hosted auth service handles Firebase auth
 4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
-5. CLI refreshes token through `<SETTLEUP_API_BASE_URL>/auth/refresh` before authenticated commands
+5. CLI refreshes token through the packaged hosted auth endpoint before authenticated commands
 
 Local/staging development flow:
 
-1. contributor sets `SETTLEUP_FIREBASE_API_KEY` in `.env` or shell env
+1. contributor sets `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` in `.env` or shell env
 2. user runs `auth login`
 3. CLI signs in directly with Firebase Auth using the local development key
 4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
@@ -103,9 +104,9 @@ Local/staging development flow:
 ### Security boundary
 
 - Firebase API keys are not committed to the open-source CLI
-- local/staging development can provide `SETTLEUP_FIREBASE_API_KEY` through `.env`
+- local/staging/internal use can provide `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` through `.env`
 - real session secrets are `refreshToken` and `accessToken`
-- hosted auth wrapping is handled by the configured Settle Up API
+- hosted auth wrapping is handled by the packaged auth endpoint, or `SETTLEUP_AUTH_BASE_URL` when explicitly overridden
 
 ### Local storage
 
