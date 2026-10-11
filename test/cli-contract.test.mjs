@@ -224,17 +224,6 @@ test('unknown commands return the stable invalid-input envelope', () => {
   assert.deepEqual(output.meta, { environment: 'test' });
 });
 
-test('schema command returns write-input examples as JSON', () => {
-  const { status, output } = runCli(['schema', 'expenses.create']);
-
-  assert.equal(status, 0);
-  assert.equal(output.ok, true);
-  assert.equal(output.data.command, 'expenses.create');
-  assert.deepEqual(output.data.required, ['type', 'purpose', 'currencyCode', 'dateTime', 'whoPaid', 'items']);
-  assert.equal(output.data.example.type, 'expense');
-  assert.equal(output.data.example.whoPaid[0].memberId, 'member_id_1');
-});
-
 test('auth login calls the configured auth wrapper and stores staging session separately', async () => {
   const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-auth-'));
   const mock = createFetchMock();

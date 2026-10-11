@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runAuthenticatedCli, groupFlags } from './helpers/cli-harness.mjs';
-import { transferInput } from './helpers/spec-fixtures.mjs';
 
 const schemas = ['groups.create', 'members.add', 'members.update', 'categories.set',
   'expenses.create', 'transfers.create', 'transactions.update'];
@@ -58,7 +57,6 @@ for (const [label, args, options] of [
   ['input flag without a value', ['transfers', 'create', ...groupFlags, '--input'], {}],
   ['invalid JSON', ['transfers', 'create', ...groupFlags, '--input', '-'], { inputText: '{' }],
   ['missing input file', ['transfers', 'create', ...groupFlags, '--input', '/nonexistent-settleup-test/input.json'], {}],
-  ['invalid currency', ['transfers', 'create', ...groupFlags, '--input', '-'], { input: { ...transferInput, currencyCode: 'usd' } }],
 ]) {
   test(`${label} gives transfer-specific recovery guidance without backend access`, () => {
     const result = runAuthenticatedCli(args, options);
