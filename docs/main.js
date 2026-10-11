@@ -1,6 +1,6 @@
 const panels = { human: document.getElementById('human-view'), machine: document.getElementById('machine-view') };
 const radios = [...document.querySelectorAll('input[name="audience"]')];
-const guideUrl = 'https://newdae.github.io/settle-up-cli/agent.md';
+const guideUrl = new URL('./agent.md', document.querySelector('link[rel=canonical]').href).href;
 function agentPrompt(agent) {
   const greeting = agent ? `Hi ${agent}, ` : '';
   return `${greeting}help me connect my Settle Up account so you can help with shared expenses and balances. Read ${guideUrl} and follow the setup guide. Check whether you have the tools to run the CLI, then help me sign in privately on the same computer where it runs. This CLI uses email/password; if I need to migrate, direct me to https://settleup.app/migrate-account. Never ask for my password or tokens in chat. Once connected, show me my groups. Make no changes to expenses or groups until I ask.`;
