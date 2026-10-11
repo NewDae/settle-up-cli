@@ -1,3 +1,5 @@
+<!-- Generated from AGENT_GUIDE.md. Run npm run docs:sync; edit the source only. -->
+
 # Settle Up CLI — install and everyday use
 
 Connect the user's Settle Up account, then help with shared expenses, groups, and balances.
@@ -23,9 +25,9 @@ Ask the user to sign in privately on the same computer where you run the CLI:
 settleup auth login
 ```
 
-Never request passwords or tokens in chat, put them in command arguments, or read session files. If your environment cannot offer private sign-in, explain what the user needs to do. The CLI refreshes the session automatically.
+Never request passwords or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If your environment cannot offer private sign-in, explain what the user needs to do. The CLI refreshes the session automatically.
 
-Verify the connection:
+`auth status` reports local session presence; a successful read confirms live access. Verify the connection:
 
 ```sh
 settleup auth status
@@ -71,18 +73,18 @@ settleup debts recalculate --group-id <groupId>
 settleup debts list --group-id <groupId>
 ```
 
-For additional tasks, use `settleup --help` or `<command> --help`.
+For additional tasks, use `settleup --help` or `<command> --help`. This CLI is a shell tool, not an MCP server; use a shell-capable agent with the user's authenticated local CLI.
 
 ## If something goes wrong
 
-Read stdout as JSON: `ok: true` means success; `ok: false` includes an error code and message. Failures exit nonzero.
+Read stdout as JSON: success is `{ "ok": true, "data": ..., "meta": ... }`; failure is `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }` with a nonzero exit code. Interactive login prompts go to stderr.
 
 - AUTH_REQUIRED / AUTH_REFRESH_FAILED: ask the user to sign in privately again.
 - AUTH_INVALID: check email/password sign-in and account migration.
 - GROUP_ACCESS_DENIED: confirm the group and the user's access.
 - API_RATE_LIMITED: wait and retry with backoff.
 
-Update with `npm install -g settle-up-cli@latest`. Sign out with `settleup auth logout`.
+Update with `npm install -g settle-up-cli@latest`. Sign out with `settleup auth logout` to remove the local session. Sessions use `~/.config/settleup-cli/<environment>/auth.json` by default (Unix directory mode 0700, file mode 0600), not an OS keychain. For auth configuration and overrides, see [the login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md).
 
 ## Enjoyed using it?
 

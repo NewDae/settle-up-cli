@@ -1,144 +1,53 @@
-# Settle Up Sandbox CLI Spec
+# Settle Up CLI specification
 
-## Goal
+This is the maintained requirements and design reference for the CLI. It preserves the original goal: a small, explicit, deterministic transport and validation layer over Settle Up for agents. Implementation differences and unmet requirements are recorded under [design evolution](#design-evolution-and-open-requirements).
 
-Provide a deterministic, JSON-only CLI for agent use against the configured Settle Up API.
+Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.md), [developer setup](DEVELOPMENT.md), [test coverage](Tests.md), and [agent workflow](AGENT_GUIDE.md). The [historical snapshot](design/CLI_SPEC.before-cleanup.md) preserves the full pre-cleanup text; the [initial spec](https://github.com/NewDae/settle-up-cli/blob/9aa02bf/CLI_SPEC.md) remains in Git history.
 
-Design constraints:
+## Requirements and design principles
 
-- No fuzzy resolution in the CLI
-- No hidden lookup before writes
-- No derived reporting commands
-- All write commands are explicit and deterministic
-- Agent is responsible for lookup, caching, aggregation, and memory
+- JSON on stdout, with stable success/error envelopes and nonzero exit status for failures. Interactive login prompts go to stderr.
+- Reads use explicit flags. Writes use exact IDs and JSON input; the CLI never resolves fuzzy group or member names.
+- The agent handles name lookup, caching, aggregation, memory, and policy decisions. The CLI handles transport and structural validation.
+- No natural-language inputs, human-first pretty output, derived reporting commands, or direct debt mutation.
+- Updates affect supplied fields only. Omitted fields remain unchanged; supplied nested arrays and objects are complete field replacements.
+- Monetary amounts and weights are decimal strings, not floating-point JSON numbers.
+- Account identity and group membership stay distinct.
+- No bundled user passwords, session tokens, or production Firebase API keys. Production database and hosted-auth URLs are packaged defaults; staging/local overrides remain supported.
+- Validate inputs before writes where practical. Backend reads for exact-ID member validation are permitted; fuzzy resolution is not.
+- Keep server behavior observable and verify writes in staging. Structural validity cannot establish that the agent chose the correct people, amount, or group.
 
----
+### Identity model
 
-## Non-Goals
+| Identifier | Scope | Meaning and uses |
+|---|---|---|
+| `uid` | Global account | Authenticated Firebase / Settle Up identity; user profile, group access, permissions. |
+| `groupId` | Group | Exact group targeted by reads and writes. |
+| `memberId` | One group | Ledger participant used in splits, transactions, debts, and settlements. |
+| `transactionId` | One group | Exact expense or transfer record to read, patch, or delete. |
 
-- No human-first pretty output by default
-- No natural-language command inputs
-- No internal "smart" matching of group names or member names
-- No bundled credentials or session tokens
-- No reporting layer like `reports spend` or `reports share`
+A `uid` is not interchangeable with a `memberId`. The same person may have different member IDs in different groups. Authentication/access control uses `uid`; transaction participants use `memberId`.
 
----
+### Patch semantics
 
-## Core Design
+`members update` and `transactions update` use partial patches:
 
-### Principles
+- Omitted keys remain unchanged; supplied scalar values overwrite their fields.
+- Supplied arrays and objects replace the complete field. For example, `items` replaces the item list, not one item inside it; `exchangeRates` replaces the map.
+- `null` clears documented nullable fields.
+- Transaction `type` cannot be patched.
 
-- Output is always JSON
-- Read commands use flags
-- Write commands use exact IDs plus JSON input
-- Mutating commands never accept fuzzy names
-- Mutating commands only affect provided fields; omitted fields remain unchanged
-- Errors are structured and stable
-- Amounts and weights are strings, not floats
+Read the current record before editing a nested field, then supply the complete intended replacement. `categories set` instead merges supplied category entries into the existing mapping. Request-shape tests verify what the CLI sends; backend persistence semantics require live checks.
 
-### Identity Model
+## Output contract
 
-There are two different identities:
-
-- `user`
-  - authenticated Firebase / Settle Up account
-  - represented by `uid`
-- `member`
-  - participant inside a specific group
-  - represented by `memberId`
-  - used in transactions and debts
-
-The CLI must keep these distinct.
-
-### `uid` vs `memberId`
-
-| Identifier | Scope | Meaning | Where used |
-|---|---|---|---|
-| `uid` | global user account | Authenticated Settle Up / Firebase user identity. | Auth, `/users/<uid>`, `/userGroups/<uid>`, `/permissions/<groupId>/<uid>` |
-| `memberId` | single group | Ledger participant inside one specific group. | `/members/<groupId>/<memberId>`, transactions, debts, splits, transfers |
-
-Rules:
-
-- a `uid` is not interchangeable with a `memberId`
-- the same person may have different `memberId` values in different groups
-- transaction and settlement commands use `memberId`, not `uid`
-- auth and access control are based on `uid`
-
----
-
-## Auth Model
-
-### What the CLI ships with
-
-- code
-- command schemas and validation
-- production API and hosted auth defaults for the published package
-- API URL and Firebase key overrides through environment or `.env` for local/staging/internal use
-
-### What the CLI must not ship with
-
-- Firebase API keys for production
-- any `idToken`
-- any `refreshToken`
-- any user password
-
-### Token flow
-
-Hosted user flow:
-
-1. user runs `auth login`
-2. CLI calls the packaged hosted auth endpoint
-3. hosted auth service handles Firebase auth
-4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
-5. CLI refreshes token through the packaged hosted auth endpoint before authenticated commands
-
-Local/staging development flow:
-
-1. contributor sets `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` in `.env` or shell env
-2. user runs `auth login`
-3. CLI signs in directly with Firebase Auth using the local development key
-4. CLI stores `accessToken`, `refreshToken`, `uid`, `expiresAt` locally
-5. CLI refreshes directly with Firebase Auth before authenticated commands
-6. backend commands still use `<SETTLEUP_API_BASE_URL>` with the stored access token
-
-### Security boundary
-
-- Firebase API keys are not committed to the open-source CLI
-- local/staging/internal use can provide `SETTLEUP_API_BASE_URL` and `SETTLEUP_FIREBASE_API_KEY` through `.env`
-- real session secrets are `refreshToken` and `accessToken`
-- hosted auth wrapping is handled by the packaged auth endpoint, or `SETTLEUP_AUTH_BASE_URL` when explicitly overridden
-
-### Local storage
-
-Preferred:
-
-- OS keychain for tokens
-
-Fallback:
-
-- config directory with strict file permissions
-
-Suggested paths:
-
-- `~/.config/settleup-cli/<environment>/auth.json`
-
----
-
-## Output Contract
-
-### Success envelope
+Success:
 
 ```json
-{
-  "ok": true,
-  "data": {},
-  "meta": {
-    "environment": "staging"
-  }
-}
+{ "ok": true, "data": {}, "meta": { "environment": "staging" } }
 ```
 
-### Error envelope
+Failure:
 
 ```json
 {
@@ -148,13 +57,11 @@ Suggested paths:
     "message": "Group g123 was not found",
     "details": {}
   },
-  "meta": {
-    "environment": "staging"
-  }
+  "meta": { "environment": "staging" }
 }
 ```
 
-### Error code set
+Stable error codes:
 
 - `AUTH_REQUIRED`
 - `AUTH_INVALID`
@@ -168,332 +75,50 @@ Suggested paths:
 - `API_RATE_LIMITED`
 - `SERVER_TASK_FAILED`
 
----
+## Command reference
 
-## Command Surface
+The executable is `settleup`. Write JSON is supplied with `--input <path>` or `--input -` for stdin. Use `settleup <group> <command> --help` for flags and `settleup schema <operation>` for an input example. Backend calls are owned by [API_REFERENCE.md](API_REFERENCE.md).
 
-### Top-level groups
+| Command | Required flags / input | Behavior |
+|---|---|---|
+| `auth login` | None | Email/password sign-in; store a local session. Private interactive input is the user/agent workflow; non-TTY automation accepts email and password on separate stdin lines. |
+| `auth status` | None | Report local session presence, `uid`, email, expiry; does not confirm live access. |
+| `auth logout` | None | Delete the local session. |
+| `users me` | None | Fetch the authenticated user's profile. |
+| `groups list` | None | List groups accessible to the current user. |
+| `groups get` | `--group-id` | Fetch group metadata, permissions, and the caller's group link. |
+| `groups create` | `--input` → `CreateGroupInput` | Create a client-generated group ID, permission record, group metadata, first member, user-group link, and current-tab setting. |
+| `members list` | `--group-id` | List members; optional `--active-only`. |
+| `members get` | `--group-id`, `--member-id` | Fetch one member. |
+| `members add` | `--group-id`, `--input` → `MemberInput` | Create a member. |
+| `members update` | `--group-id`, `--member-id`, `--input` → `MemberPatchInput` | Patch supplied member fields. |
+| `categories list` | `--group-id` | List custom category mappings. |
+| `categories set` | `--group-id`, `--input` → `SetCategoriesInput` | Merge supplied category entries. |
+| `transactions list` | `--group-id` | Fetch raw transactions, filter and order client-side; see filter reference below. |
+| `transactions get` | `--group-id`, `--transaction-id` | Fetch one transaction. |
+| `transactions update` | `--group-id`, `--transaction-id`, `--input` → `TransactionPatchInput` | Patch supplied transaction fields; validate referenced members when present. |
+| `transactions delete` | `--group-id`, `--transaction-id` | Delete one transaction. |
+| `expenses create` | `--group-id`, `--input` → `ExpenseInput` | Validate members and create an expense. |
+| `transfers create` | `--group-id`, `--input` → `TransferInput` | Validate members and record a payment/settlement. Sender is in `whoPaid`, receiver in `items[].forWhom`. |
+| `debts list` | `--group-id` | Read server-calculated debts. |
+| `debts recalculate` | `--group-id` | Request server-side debt recalculation. |
+| `changes list` | `--group-id` | Read the change log; optional `--limit <n>` and `--order asc\|desc`. |
+| `schema <operation>` | Operation, e.g. `expenses.create` | Return field types/descriptions, required/optional status, nested fields, an input example, and invocation. |
 
-- `auth`
-- `users`
-- `groups`
-- `members`
-- `categories`
-- `transactions`
-- `expenses`
-- `transfers`
-- `debts`
-- `changes`
-- `schema`
-
----
-
-## Commands
-
-### `auth`
-
-#### `settleup auth login`
-
-Purpose:
-
-- authenticate user and store local session
-
-Behavior:
-
-- prompt for email interactively
-- prompt for password interactively with hidden input
-- no non-interactive mode
-
-Output:
+Auth/login and status examples:
 
 ```json
-{
-  "ok": true,
-  "data": {
-    "uid": "u1",
-    "email": "me@example.com",
-    "expiresAt": 1777872000000
-  }
-}
+{ "ok": true, "data": { "uid": "u1", "email": "me@example.com", "expiresAt": 1777872000000 }, "meta": { "environment": "staging" } }
 ```
-
-#### `settleup auth status`
-
-Output:
 
 ```json
-{
-  "ok": true,
-  "data": {
-    "authenticated": true,
-    "uid": "u1",
-    "email": "me@example.com",
-    "expiresAt": 1777872000000
-  }
-}
+{ "ok": true, "data": { "authenticated": true, "uid": "u1", "email": "me@example.com", "expiresAt": 1777872000000 }, "meta": { "environment": "staging" } }
 ```
 
-#### `settleup auth logout`
+With no session, status reports `authenticated: false` and null identity/expiry fields. Tokens and login configuration are described in [LOGIN.md](LOGIN.md).
 
-Purpose:
+## Input types
 
-- delete local session
-
----
-
-### `users`
-
-#### `settleup users me`
-
-Purpose:
-
-- fetch `/users/<uid>`
-
----
-
-### `groups`
-
-#### `settleup groups list`
-
-Purpose:
-
-- list groups accessible to current user
-
-Reads:
-
-- `/userGroups/<uid>`
-- `/groups/<groupId>`
-
-#### `settleup groups get --group-id <groupId>`
-
-Purpose:
-
-- fetch one group, permissions, and caller membership
-
-Reads:
-
-- `/groups/<groupId>`
-- `/permissions/<groupId>`
-- `/userGroups/<uid>/<groupId>`
-
-#### `settleup groups create --input -|<path>`
-
-Purpose:
-
-- create group and first member
-
-Input type:
-
-- `CreateGroupInput`
-
-Writes:
-
-1. Generate a client-side `groupId`
-2. `PUT /permissions/<groupId>/<uid>`
-3. `PATCH /groups/<groupId>`
-4. `POST /members/<groupId>`
-5. `PUT /userGroups/<uid>/<groupId>`
-6. `PUT /users/<uid>/currentTabId`
-
-Sandbox note:
-
-- `POST /groups` is not used because permissions must exist before group metadata is writable.
-- Creating `/permissions/<groupId>/<uid>` creates a minimal group stub with invite metadata.
-- The CLI should patch that stub with `CreateGroupInput` group fields, then create the creator's member and user-group link.
-
----
-
-### `members`
-
-#### `settleup members list --group-id <groupId> [--active-only]`
-
-Purpose:
-
-- list members in a group
-
-#### `settleup members get --group-id <groupId> --member-id <memberId>`
-
-Purpose:
-
-- fetch one member
-
-#### `settleup members add --group-id <groupId> --input -|<path>`
-
-Purpose:
-
-- create member in group
-
-Input type:
-
-- `MemberInput`
-
-#### `settleup members update --group-id <groupId> --member-id <memberId> --input -|<path>`
-
-Purpose:
-
-- patch member object
-
-Input type:
-
-- `MemberPatchInput`
-
-Important:
-
-- only provided keys are updated
-- omitted keys remain unchanged
-
----
-
-### `categories`
-
-#### `settleup categories list --group-id <groupId>`
-
-Purpose:
-
-- list custom category mappings
-
-#### `settleup categories set --group-id <groupId> --input -|<path>`
-
-Purpose:
-
-- patch category mappings
-
-Input type:
-
-- `SetCategoriesInput`
-
----
-
-### `transactions`
-
-#### `settleup transactions list --group-id <groupId> [filters...]`
-
-Purpose:
-
-- list raw transactions with client-side filtering
-
-Supported filters:
-
-- `--type expense|transfer`
-- `--from <YYYY-MM-DD|epochMillis>`
-- `--to <YYYY-MM-DD|epochMillis>`
-- `--member-id <memberId>`
-- `--paid-by-member-id <memberId>`
-- `--category <categoryKey>`
-- `--limit <n>`
-- `--order asc|desc`
-
-Filter semantics:
-
-- `member-id`: member appears anywhere in transaction
-- `paid-by-member-id`: member appears in `whoPaid`
-- `from` and `to`: inclusive bounds on `dateTime`
-- `category`: exact transaction category match
-
-#### `settleup transactions get --group-id <groupId> --transaction-id <transactionId>`
-
-Purpose:
-
-- fetch one transaction
-
-#### `settleup transactions update --group-id <groupId> --transaction-id <transactionId> --input -|<path>`
-
-Purpose:
-
-- patch transaction object
-
-Input type:
-
-- `TransactionPatchInput`
-
-Important:
-
-- only provided top-level keys are updated
-- omitted keys remain unchanged
-- if an array field is provided, the whole array replaces the stored array
-- if an object field is provided, the whole object replaces the stored object
-
-#### `settleup transactions delete --group-id <groupId> --transaction-id <transactionId>`
-
-Purpose:
-
-- delete transaction
-
----
-
-### `expenses`
-
-#### `settleup expenses create --group-id <groupId> --input -|<path>`
-
-Purpose:
-
-- create expense transaction
-
-Input type:
-
-- `ExpenseInput`
-
----
-
-### `transfers`
-
-#### `settleup transfers create --group-id <groupId> --input -|<path>`
-
-Purpose:
-
-- create transfer transaction
-- this is the mechanism for marking settlement
-- settlement is not a separate debt mutation; a settlement is recorded as a `transfer` transaction from the debtor to the creditor
-
-Input type:
-
-- `TransferInput`
-
----
-
-### `debts`
-
-#### `settleup debts list --group-id <groupId>`
-
-Purpose:
-
-- fetch server-calculated debts
-
-#### `settleup debts recalculate --group-id <groupId>`
-
-Purpose:
-
-- trigger debt recalculation server task
-
----
-
-### `changes`
-
-#### `settleup changes list --group-id <groupId> [--limit <n>] [--order asc|desc]`
-
-Purpose:
-
-- fetch group change log
-
----
-
-### `schema`
-
-#### `settleup schema <command>`
-
-Examples:
-
-- `settleup schema groups.create`
-- `settleup schema members.update`
-- `settleup schema expenses.create`
-
-Purpose:
-
-- print exact JSON input contract, required fields, and example payload
-
----
-
-## Input Types
 
 ### `CreateGroupInput`
 
@@ -526,7 +151,7 @@ Used by:
 | `defaultPermission` | integer (`10`/`20`/`30`) | no | Default permission level assigned to new users added to the group. |
 | `minimizeDebts` | boolean | no | Whether Settle Up should minimize the number of settlement transfers. |
 | `remindOldDebts` | boolean | no | Whether the group should enable reminders for older outstanding debts. |
-| `firstMember` | object | yes | Initial group member representing the creator inside the group ledger. |
+| `firstMember` | object | yes | Initial group member representing the creator inside the group ledger; uses MemberInput fields. |
 
 ---
 
@@ -535,7 +160,6 @@ Used by:
 Used by:
 
 - `members add`
-- `members update`
 
 ```json
 {
@@ -557,12 +181,6 @@ Used by:
 | `bankAccount` | string or `null` | no | Optional bank account or payout reference shown for settlement. |
 | `lightningAddress` | string or `null` | no | Optional Lightning payment address for settlement. |
 
-Update behavior:
-
-- partial patch
-- only provided keys are changed
-- omitted keys are preserved
-
 ---
 
 ### `MemberPatchInput`
@@ -580,20 +198,7 @@ Example:
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `name` | string | no | Updated member display name shown in the group. |
-| `active` | boolean | no | Updated flag controlling whether the member is included by default in future transactions. |
-| `defaultWeight` | decimal string | no | Updated default split weight for this member in new transactions. |
-| `photoUrl` | string or `null` | no | Updated avatar URL for the member. |
-| `bankAccount` | string or `null` | no | Updated bank account or payout reference shown for settlement. |
-| `lightningAddress` | string or `null` | no | Updated Lightning payment address for settlement. |
-
-Patch semantics:
-
-- only keys present in the input are changed
-- omitted keys are preserved
-- `null` clears nullable fields such as `photoUrl`, `bankAccount`, and `lightningAddress`
+Accepts the same fields and types as [MemberInput](#memberinput), with every field optional. See [patch semantics](#patch-semantics); `null` clears `photoUrl`, `bankAccount`, or `lightningAddress`.
 
 ---
 
@@ -692,20 +297,24 @@ Used by:
 }
 ```
 
+#### Transaction fields
+
+These fields are shared by expenses and transfers; only `type` and the payer/recipient interpretation differ.
+
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `type` | literal `"expense"` | yes | Transaction kind; fixed to expense for this command. |
-| `purpose` | string | yes | Human-readable label describing what the expense was for. |
+| `type` | `"expense"` or `"transfer"` | yes | Transaction kind: `"expense"` or `"transfer"`, matching the create command. |
+| `purpose` | string | yes | Human-readable label describing the expense or payment. |
 | `category` | string | no | Category key or emoji used to classify the transaction. |
 | `currencyCode` | string | yes | ISO currency code of the transaction amounts. |
-| `dateTime` | epoch millis | yes | Timestamp when the expense occurred. |
+| `dateTime` | epoch millis | yes | Timestamp when the transaction occurred. |
 | `timezone` | string | no | Timezone offset of the user creating the transaction, for example `"+05:30"`. |
 | `fixedExchangeRate` | boolean | no | Whether exchange rates were manually fixed instead of auto-derived. |
 | `exchangeRates` | object<string,string> | no | Optional conversion map from target currency to rate relative to `currencyCode`. |
 | `receiptUrl` | string or `null` | no | Optional URL pointing to a receipt image or document. |
 | `templateId` | string or `null` | no | Optional reference to a recurring or future transaction template. |
 | `whoPaid` | `WeightedMemberRef[]` | yes | Members who actually paid the money, with weights if multiple people contributed. |
-| `items` | `TransactionItem[]` | yes | Expense line items that together make up the full transaction amount and split. |
+| `items` | `TransactionItem[]` | yes | Line items that together make up the full transaction amount and split; for transfers, these allocate to receivers. |
 
 ---
 
@@ -741,26 +350,7 @@ Used by:
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `type` | literal `"transfer"` | yes | Transaction kind; fixed to transfer for this command. |
-| `purpose` | string | yes | Human-readable label describing what the transfer was for. |
-| `category` | string | no | Category key or emoji used to classify the transaction. |
-| `currencyCode` | string | yes | ISO currency code of the transaction amounts. |
-| `dateTime` | epoch millis | yes | Timestamp when the transfer occurred. |
-| `timezone` | string | no | Timezone offset of the user creating the transaction, for example `"+05:30"`. |
-| `fixedExchangeRate` | boolean | no | Whether exchange rates were manually fixed instead of auto-derived. |
-| `exchangeRates` | object<string,string> | no | Optional conversion map from target currency to rate relative to `currencyCode`. |
-| `receiptUrl` | string or `null` | no | Optional URL pointing to a receipt image or document. |
-| `templateId` | string or `null` | no | Optional reference to a recurring or future transaction template. |
-| `whoPaid` | `WeightedMemberRef[]` | yes | Members who actually sent the money. |
-| `items` | `TransactionItem[]` | yes | Receiving-side allocation for the transfer amount. |
-
-Interpretation:
-
-- sender is in `whoPaid`
-- receiver side is in `items[].forWhom`
-- debt settlement uses this same transfer shape: the settling member is in `whoPaid`, and the member receiving settlement is in `items[].forWhom`
+Uses the [transaction fields](#transaction-fields), with `type: "transfer"`. `whoPaid` identifies senders; `items[].forWhom` allocates the amount to receivers. For debt settlement, the debtor sends and the creditor receives.
 
 ---
 
@@ -789,307 +379,77 @@ Example:
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `purpose` | string | no | Updated human-readable label describing what the transaction was for. |
-| `category` | string | no | Updated category key string used to classify the transaction. |
-| `currencyCode` | string | no | Updated ISO currency code of the transaction amounts. |
-| `dateTime` | epoch millis | no | Updated timestamp when the transaction occurred. |
-| `timezone` | string | no | Updated timezone offset of the user creating the transaction. |
-| `fixedExchangeRate` | boolean | no | Updated flag indicating whether exchange rates were manually fixed. |
-| `exchangeRates` | object<string,string> | no | Replacement exchange rate map relative to `currencyCode`. |
-| `receiptUrl` | string or `null` | no | Updated receipt URL; `null` clears it. |
-| `templateId` | string or `null` | no | Updated template reference; `null` clears it. |
-| `whoPaid` | `WeightedMemberRef[]` | no | Replacement payer array for the transaction. |
-| `items` | `TransactionItem[]` | no | Replacement item array for the transaction. |
+Accepts the [transaction fields](#transaction-fields) except `type`, with every field optional. Transaction kind is immutable. See [patch semantics](#patch-semantics); `whoPaid`, `items`, and `exchangeRates` are supplied as complete replacement fields, and `null` clears `receiptUrl` or `templateId`.
 
-Patch semantics:
+## Transaction filter reference
 
-- only keys present in the input are changed
-- omitted keys are preserved
-- `whoPaid` replaces the full stored payer array if provided
-- `items` replaces the full stored item array if provided
-- `exchangeRates` replaces the full stored object if provided
-- `type` is not patchable; transaction kind stays whatever the original record is
-
----
-
-## Filter Reference
-
-### `transactions list`
+`transactions list` fetches the group's transactions before applying filters locally.
 
 | Flag | Type | Meaning |
 |---|---|---|
-| `--type` | enum | `expense` or `transfer` |
-| `--from` | date or epoch | inclusive lower bound |
-| `--to` | date or epoch | inclusive upper bound |
-| `--member-id` | string | member appears anywhere in transaction |
-| `--paid-by-member-id` | string | member appears in `whoPaid` |
-| `--category` | string | exact category match |
-| `--limit` | integer | max results |
-| `--order` | enum | `asc` or `desc` by `dateTime` |
-
-Date handling:
-
-- `YYYY-MM-DD` is interpreted as local-day range
-- `epochMillis` passes through as-is
-
----
-
-## Help UX
-
-### Required help layers
-
-#### `settleup --help`
-
-Shows:
-
-- command groups
-- one-line purpose for each
-
-#### `settleup <group> --help`
-
-Shows:
-
-- subcommands
-- required flags
-
-#### `settleup <group> <command> --help`
-
-Shows:
-
-- command synopsis
-- one-line description of what the command does
-- required flags
-- optional flags
-- which identifier types are expected, such as `uid`, `groupId`, or `memberId`
-- whether the command reads raw data, creates a record, patches selected fields, or deletes a record
-- input type name if command accepts `--input`
-- one small example
-
-#### `settleup schema <command>`
-
-Shows:
-
-- exact JSON shape
-- required fields
-- field meanings
-- example invocation
-
-### Help quality rule
-
-Every write command must point to schema help in both:
-
-- `--help`
-- validation errors
-
-Every update command help page must explicitly say:
-
-- patch command, not full replace
-- omitted keys remain unchanged
-- provided arrays replace the full stored array
-- provided objects replace the full stored object
-
-Example error:
-
-```json
-{
-  "ok": false,
-  "error": {
-    "code": "INVALID_INPUT",
-    "message": "Missing required field: whoPaid",
-    "details": {
-      "help": "Run `settleup schema expenses.create` for the expected JSON input"
-    }
-  }
-}
-```
-
----
-
-## Validation Rules
-
-The CLI should validate before calling the API when practical.
-
-### General validation
-
-- required fields present
-- IDs are non-empty strings
-- `amount` and `weight` are decimal strings
-- all referenced `memberId`s exist in the target group
-- `currencyCode` is non-empty and 3 letters
-- `dateTime` is epoch millis
-
-### Patch semantics
-
-These commands are patch commands:
-
-- `members update`
-- `transactions update`
-
-Rules:
-
-- omitted keys remain unchanged
-- provided scalar fields overwrite the stored scalar values
-- provided object fields replace the stored object at that field
-- provided array fields replace the stored array at that field
-- nullable fields can be cleared by sending `null`
-
----
-
-## API Mapping
-
-Detailed endpoint behavior and command-to-path mapping are documented in [API_REFERENCE.md](API_REFERENCE.md). This section is the short summary.
-
-### Firebase Auth
-
-- sign in:
-  - `POST https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<API_KEY>`
-- refresh token:
-  - `POST https://securetoken.googleapis.com/v1/token?key=<API_KEY>`
-
-### Settle Up backend paths
-
-- `/users/<uid>`
-- `/userGroups/<uid>`
-- `/groups/<groupId>`
-- `/permissions/<groupId>`
-- `/members/<groupId>`
-- `/transactions/<groupId>`
-- `/debts/<groupId>`
-- `/groupCategories/<groupId>`
-- `/changes/<groupId>`
-- `/serverTasks/<taskName>`
-
----
-
-## Risks and Failure Points
-
-### 1. Shipping project config expands attack surface
-
-Risk:
-
-- if `apiKey` and `databaseUrl` are bundled publicly, anyone can target the Firebase project endpoints
-
-Impact:
-
-- not enough to impersonate users by itself
-- still expands unauthorized sign-in or account-creation attack surface depending on auth settings
-
-Mitigation:
-
-- require runtime config
-- do not bundle project config in a public CLI
-
-### 2. Update semantics for nested data can still be misunderstood
-
-Risk:
-
-- callers may assume arrays are patched element-by-element when they are actually replace-on-write at the field level
-
-Mitigation:
-
-- document patch semantics clearly
-- document that arrays and objects replace the whole field when provided
-- recommend read-modify-write flow before editing nested arrays
-
-### 3. Transaction filtering may be expensive
-
-Risk:
-
-- `transactions list` may need to fetch all transactions in a group and filter client-side
-
-Impact:
-
-- slow for large groups
-- more bandwidth
-
-Mitigation:
-
-- keep filtering behavior explicit
-- consider future optimization only if needed
-
-### 4. Date filtering can be ambiguous
-
-Risk:
-
-- `YYYY-MM-DD` depends on timezone interpretation
-
-Mitigation:
-
-- document inclusive local-day semantics
-- prefer epoch millis for deterministic agent workflows
-
-### 5. Member and user identity can be confused
-
-Risk:
-
-- agent may accidentally use `uid` where `memberId` is required
-
-Mitigation:
-
-- make command docs explicit about ID type
-- return both structures distinctly where useful
-
-### 6. Settle Up API docs are thin
-
-Risk:
-
-- some write semantics may not be fully documented
-- server behavior may differ from assumptions around transfer structure or optional fields
-
-Mitigation:
-
-- test all write flows in staging first
-- keep CLI behavior thin and observable
-- avoid adding abstractions until staging behavior is verified
-
-### 7. Debts are derived state
-
-Risk:
-
-- client may try to mutate debts directly
-
-Mitigation:
-
-- never support direct debt mutation
-- settlement only through transfer transactions
-
-### 8. Agent errors can still create bad writes
-
-Risk:
-
-- deterministic CLI does not protect against logically wrong but structurally valid agent payloads
-
-Mitigation:
-
-- add strong validation
-- require explicit IDs
-- keep outputs raw and inspectable
-- use patch semantics for update commands so small edits are less likely to wipe unrelated fields
-- make command help explicit about object type, identifier type, and patch behavior
-
-Residual risk:
-
-- patch semantics reduce accidental destructive overwrites
-- they do not prevent logically incorrect updates, wrong IDs, or incorrect replacement of array fields
-
----
-
-## Recommended Agent Workflow
-
-1. `auth login`
-2. `groups list`
-3. `members list --group-id ...`
-4. `transactions list --group-id ... --from ... --to ...`
-5. `expenses create --group-id ... --input -`
-6. `debts list --group-id ...`
-7. `transfers create --group-id ... --input -`
-
----
-
-## Final Recommendation
-
-Keep this CLI small, explicit, and boring.
-
-The main mistake to avoid is moving agent reasoning into the CLI. The CLI should be a deterministic transport and validation layer over Settle Up, not a policy engine.
+| `--type` | `expense` or `transfer` | Transaction kind. |
+| `--from` | `YYYY-MM-DD` or epoch millis | Inclusive lower `dateTime` bound. |
+| `--to` | `YYYY-MM-DD` or epoch millis | Inclusive upper `dateTime` bound. |
+| `--member-id` | Member ID | Member appears in payers or any item recipient list. |
+| `--paid-by-member-id` | Member ID | Member appears in `whoPaid`. |
+| `--category` | String | Exact category match. |
+| `--limit` | Integer | Maximum results. |
+| `--order` | `asc` or `desc` | Order by `dateTime`; default ascending. |
+
+Date-only bounds use the CLI process's local timezone: start of day for `--from`, end of day for `--to`. Epoch milliseconds pass through unchanged. Prefer epoch bounds for deterministic agent workflows.
+
+## Help and validation requirements
+
+| Discovery command | Required information |
+|---|---|
+| `settleup --help` | Command groups and one-line purposes. |
+| `settleup <group> --help` | Subcommands and required flags. |
+| `settleup <group> <command> --help` | Synopsis, description, required/optional flags, expected identifier types, read/create/patch/delete behavior, input type, and a small example. |
+| `settleup schema <operation>` | JSON input shape, required fields, field meanings, and an example invocation. |
+
+Every input-taking write command links to schema help in command help and input-validation errors. Validation failures expose the matching command in `error.details.commandHelp` and recovery guidance in `error.details.help`. Flag-only writes point to command help. Auth, access, rate-limit, and request failures instead receive guidance suited to their error code; backend error details are retained. Update help states the [patch semantics](#patch-semantics).
+
+Schema output retains `command`, `required`, `example`, and existing `patch` notes. It adds `inputType`, `fields`, and `invocation`. Each field has `type`, `description`, and `required`; nullable fields use `nullable: true`. Nested objects use `fields`, arrays use `items`, and mappings describe `keys`/`values`. Formats such as `decimal-string` and `epoch-milliseconds` clarify representation. This is discovery metadata, not a formal JSON Schema validation document.
+
+Expected validation:
+
+- Required fields present and IDs nonempty strings.
+- Amounts/weights nonnegative decimal strings, e.g. `"0"`, `"1"`, `"1.5"`; numbers, signs, exponent notation, and leading-zero forms such as `"01"` are rejected.
+- Currency codes match three uppercase letters; this checks format, not membership in a currency registry.
+- Dates are nonnegative integer epoch milliseconds; timezone offsets use `±HH:MM`.
+- Documented boolean, mapping, string, nullable, and nonempty payer/item/recipient-array types are enforced.
+- Referenced transaction members exist in the target group. The CLI fetches members for this check before writing.
+- Transaction patches cannot change `type`.
+
+Authentication can refresh before payload validation. The guarantee is validation before the write; zero-request tests use a fresh session. Local tests and their limits are described in [Tests.md](Tests.md).
+
+## Risks and operating guidance
+
+| Risk | Guidance |
+|---|---|
+| Public project configuration increases endpoint exposure | Keep Firebase keys and user credentials out of the package. Production URLs are public defaults; backend access rules and hosted auth remain essential. |
+| Nested edits can unintentionally remove entries | Read first and supply complete replacement arrays/maps. Partial patches protect omitted fields, not entries inside supplied fields. |
+| Client-side filtering costs bandwidth/time on large groups | Make the full-group fetch explicit; add optimization only when needed. |
+| Date-only ranges vary by timezone | Document local-day bounds; use epoch milliseconds when exact bounds matter. |
+| Account and ledger identity can be confused | Use group `memberId` for participants and account `uid` for auth/access. |
+| Backend write semantics may differ from assumptions | Verify staging write flows and read back results; keep the wrapper thin and observable before adding abstractions. |
+| Derived debts can lag transactions | Settlement is a transfer from debtor to creditor, never a direct debt edit. Request recalculation and re-read debts. |
+| A valid payload can still express the wrong user intent | Agent must resolve IDs, clarify ambiguous amounts/participants, act only on authorized changes, and read back results. Validation cannot prove semantic correctness. |
+| A create may succeed despite an uncertain response | Inspect records before retrying; blind retries can duplicate writes. |
+
+The canonical discover → read → schema → write → read-back workflow is in [AGENT_GUIDE.md](AGENT_GUIDE.md). Keep reasoning and reporting with the agent rather than adding a policy engine to the CLI.
+
+## Design evolution and open requirements
+
+The original design principles remain the basis of the CLI. This table preserves earlier intentions while distinguishing current implementation. Unimplemented preferences remain explicit; completed discovery improvements are recorded below.
+
+| Earlier statement / requirement | Current status |
+|---|---|
+| No hidden lookup before writes | Exact-ID member validation performs a backend read before transaction writes; group creation reads its permission-created stub. No fuzzy name lookup is added. |
+| Interactive login only | Private interactive sign-in remains the recommended user/agent workflow. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
+| Do not bundle project configuration; require runtime config | Published package bundles production database/hosted-auth URLs for zero-config use, but no Firebase key or user/session secrets. Environment overrides remain available. |
+| Prefer OS keychain, with restricted-file fallback | Keychain remains an unimplemented preference. Current storage uses per-environment files with Unix directory/file modes 0700/0600; details in [LOGIN.md](LOGIN.md). |
+| Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |
+| Every write command and validation error directs callers to schema help | Implemented for input-taking write validation. Flag-only deletion/recalculation points to command help; auth, configuration, permissions, and service errors give relevant recovery guidance. |
+
+The [historical snapshot](design/CLI_SPEC.before-cleanup.md) retains all earlier wording. Its content is consolidated here as requirements/identity/output/commands/input types/filter/help/validation/risks, in [LOGIN.md](LOGIN.md) as auth/storage, and in [API_REFERENCE.md](API_REFERENCE.md) as endpoint mapping. Implementation correctness should be assessed with [Tests.md](Tests.md), not inferred from the design document alone.

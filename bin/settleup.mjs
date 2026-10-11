@@ -366,13 +366,20 @@ async function dbDelete(dbPath, auth) {
 }
 
 function readInput(inputFlag) {
-  if (!inputFlag) {
+  if (typeof inputFlag !== 'string' || inputFlag.length === 0) {
     throw Object.assign(new Error('Missing required flag: --input'), {
       cliCode: 'INVALID_INPUT',
       details: {},
     });
   }
-  const text = inputFlag === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(inputFlag, 'utf8');
+  let text;
+  try {
+    text = inputFlag === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(inputFlag, 'utf8');
+  } catch {
+    throw Object.assign(new Error('Could not read JSON input; check the input path and file permissions'), {
+      cliCode: 'INVALID_INPUT', details: { inputPath: inputFlag },
+    });
+  }
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -399,11 +406,10 @@ function assertDecimalString(value, name) {
   }
 }
 
-function assertCurrency(value) {
+function assertCurrency(value, name = 'currencyCode') {
   if (typeof value !== 'string' || !/^[A-Z]{3}$/.test(value)) {
-    throw Object.assign(new Error('Invalid currencyCode; run `settleup schema expenses.create` for the expected JSON input'), {
-      cliCode: 'INVALID_INPUT',
-      details: { help: 'Run `settleup schema expenses.create` for the expected JSON input' },
+    throw Object.assign(new Error(`Invalid ${name}; expected three uppercase letters`), {
+      cliCode: 'INVALID_INPUT', details: {},
     });
   }
 }
@@ -443,7 +449,7 @@ function assertMemberInput(input, { partial = false } = {}) {
 function assertGroupInput(input) {
   if (!isObject(input)) throw Object.assign(new Error('Input must be an object'), { cliCode: 'INVALID_INPUT', details: {} });
   assertNonEmptyString(input.name, 'name');
-  assertCurrency(input.convertedToCurrency);
+  assertCurrency(input.convertedToCurrency, 'convertedToCurrency');
   if (Object.hasOwn(input, 'defaultPermission') && ![10, 20, 30].includes(input.defaultPermission)) {
     throw Object.assign(new Error('Invalid field: defaultPermission'), { cliCode: 'INVALID_INPUT', details: {} });
   }
@@ -461,17 +467,37 @@ function assertTransactionInput(input, type) {
   if (input.type !== type) {
     throw Object.assign(new Error(`Expected transaction type ${type}`), {
       cliCode: 'INVALID_INPUT',
-      details: { help: `Run \`settleup schema ${type === 'expense' ? 'expenses.create' : 'transfers.create'}\` for the expected JSON input` },
+      details: {},
     });
   }
   assertNonEmptyString(input.purpose, 'purpose');
   assertCurrency(input.currencyCode);
   assertEpochMillis(input.dateTime, 'dateTime');
   assertTimezone(input.timezone);
+  if (Object.hasOwn(input, 'category') && typeof input.category !== 'string') {
+    throw Object.assign(new Error('Invalid field: category'), { cliCode: 'INVALID_INPUT', details: {} });
+  }
+  if (Object.hasOwn(input, 'fixedExchangeRate') && typeof input.fixedExchangeRate !== 'boolean') {
+    throw Object.assign(new Error('Invalid field: fixedExchangeRate'), { cliCode: 'INVALID_INPUT', details: {} });
+  }
+  if (Object.hasOwn(input, 'exchangeRates')) {
+    if (!isObject(input.exchangeRates)) {
+      throw Object.assign(new Error('Invalid field: exchangeRates'), { cliCode: 'INVALID_INPUT', details: {} });
+    }
+    for (const [code, rate] of Object.entries(input.exchangeRates)) {
+      assertCurrency(code, `exchangeRates.${code} currencyCode`);
+      assertDecimalString(rate, `exchangeRates.${code}`);
+    }
+  }
+  for (const nullable of ['receiptUrl', 'templateId']) {
+    if (Object.hasOwn(input, nullable) && input[nullable] !== null && typeof input[nullable] !== 'string') {
+      throw Object.assign(new Error(`Invalid field: ${nullable}`), { cliCode: 'INVALID_INPUT', details: {} });
+    }
+  }
   if (!Array.isArray(input.whoPaid) || input.whoPaid.length === 0) {
     throw Object.assign(new Error('Missing required field: whoPaid'), {
       cliCode: 'INVALID_INPUT',
-      details: { help: `Run \`settleup schema ${type === 'expense' ? 'expenses.create' : 'transfers.create'}\` for the expected JSON input` },
+      details: {},
     });
   }
   input.whoPaid.forEach((ref, index) => assertWeightedRef(ref, `whoPaid[${index}]`));
@@ -493,7 +519,7 @@ function assertTransactionPatch(input) {
   if (Object.hasOwn(input, 'type')) {
     throw Object.assign(new Error('Transaction type is not patchable'), {
       cliCode: 'INVALID_INPUT',
-      details: { help: 'Run `settleup schema transactions.update` for the expected JSON input' },
+      details: {},
     });
   }
   const merged = {
@@ -931,6 +957,114 @@ const SCHEMAS = {
   },
 };
 
+// Field descriptions are shared across schema output; runtime validation remains
+// in the existing validators. This is discovery metadata, not a validation engine.
+function describeFields(fields, required = []) {
+  return Object.fromEntries(Object.entries(fields).map(([name, field]) => [
+    name, { ...field, required: required.includes(name) },
+  ]));
+}
+
+const MEMBER_FIELDS = {
+  name: { type: 'string', description: 'Nonempty member display name.' },
+  active: { type: 'boolean', description: 'Whether this member is included by default in future transactions.' },
+  defaultWeight: { type: 'string', format: 'decimal-string', description: 'Default relative split share; "1" is a normal equal share, not a monetary amount.' },
+  photoUrl: { type: 'string', nullable: true, description: 'Avatar URL; null clears it.' },
+  bankAccount: { type: 'string', nullable: true, description: 'Bank account or payout reference for settlement; null clears it.' },
+  lightningAddress: { type: 'string', nullable: true, description: 'Lightning payment address; null clears it.' },
+};
+const WEIGHTED_MEMBER_FIELDS = describeFields({
+  memberId: { type: 'string', description: 'Exact participant ID in this group, not the account uid.' },
+  weight: { type: 'string', format: 'decimal-string', description: 'Relative contribution or split share; "1" gives one equal share, not a monetary amount.' },
+}, ['memberId', 'weight']);
+const WEIGHTED_MEMBERS = {
+  type: 'array', minItems: 1,
+  items: { type: 'object', fields: WEIGHTED_MEMBER_FIELDS },
+};
+const TRANSACTION_FIELDS = {
+  purpose: { type: 'string', description: 'Nonempty label describing the expense or payment.' },
+  category: { type: 'string', description: 'Category key or emoji.' },
+  currencyCode: { type: 'string', format: 'currency-code', description: 'Three uppercase letters for the transaction currency, e.g. USD or INR.' },
+  dateTime: { type: 'integer', format: 'epoch-milliseconds', description: 'Nonnegative timestamp when the transaction occurred; not an ISO date string.' },
+  timezone: { type: 'string', format: 'timezone-offset', description: 'Offset in ±HH:MM format, e.g. +05:30; not a timezone name.' },
+  fixedExchangeRate: { type: 'boolean', description: 'Whether exchange rates were fixed manually.' },
+  exchangeRates: {
+    type: 'object', description: 'Conversion rates from currencyCode to target currencies; a patch replaces the entire map.',
+    keys: { type: 'string', format: 'currency-code', description: 'Target currency, e.g. USD.' },
+    values: { type: 'string', format: 'decimal-string', description: 'Rate as a nonnegative decimal string.' },
+  },
+  receiptUrl: { type: 'string', nullable: true, description: 'Receipt image/document URL; null clears it.' },
+  templateId: { type: 'string', nullable: true, description: 'Recurring/future transaction template reference; null clears it.' },
+  whoPaid: { ...WEIGHTED_MEMBERS, description: 'Members who paid, weighted by their relative contributions; a patch replaces the complete payer array.' },
+  items: {
+    type: 'array', minItems: 1, description: 'Line amounts and participant allocations; a patch replaces the complete item array.',
+    items: {
+      type: 'object', fields: describeFields({
+        amount: { type: 'string', format: 'decimal-string', description: 'Line amount in the transaction currency, e.g. "42.50"; not a number.' },
+        forWhom: { ...WEIGHTED_MEMBERS, description: 'Members allocated this line amount, weighted by relative shares.' },
+      }, ['amount', 'forWhom']),
+    },
+  },
+};
+
+function schemaFields(command) {
+  let fields;
+  switch (command) {
+    case 'groups.create':
+      fields = {
+        name: { type: 'string', description: 'Nonempty group display name.' },
+        convertedToCurrency: { type: 'string', format: 'currency-code', description: 'Three uppercase letters for the currency used for balances and debts.' },
+        defaultPermission: { type: 'integer', enum: [10, 20, 30], description: 'Default permission level assigned to new users.' },
+        minimizeDebts: { type: 'boolean', description: 'Whether to minimize the number of settlement transfers.' },
+        remindOldDebts: { type: 'boolean', description: 'Whether reminders for older debts are enabled.' },
+        ownerColor: { type: 'string', description: 'Owner color; defaults to #ec1561 when omitted.' },
+        inviteLinkActive: { type: 'boolean', description: 'Whether the group invite link is active; defaults to true.' },
+        firstMember: { type: 'object', description: 'Creator as a participant in this group ledger.', fields: describeFields(MEMBER_FIELDS, ['name']) },
+      };
+      break;
+    case 'members.add':
+    case 'members.update':
+      fields = MEMBER_FIELDS;
+      break;
+    case 'expenses.create':
+    case 'transfers.create': {
+      const type = command === 'expenses.create' ? 'expense' : 'transfer';
+      fields = {
+        type: { type: 'string', enum: [type], description: `Must be "${type}" for this command; transaction type cannot be patched.` },
+        ...TRANSACTION_FIELDS,
+      };
+      if (type === 'transfer') {
+        fields.whoPaid = { ...fields.whoPaid, description: 'Members sending the payment; for settlement, the debtor is the sender.' };
+        fields.items = { ...fields.items, description: 'Payment amounts allocated to receivers in items[].forWhom; for settlement, the creditor receives.' };
+      }
+      break;
+    }
+    case 'transactions.update':
+      fields = TRANSACTION_FIELDS;
+      break;
+    case 'categories.set':
+      fields = {
+        categories: {
+          type: 'object', description: 'Merge supplied category labels into the group mapping.',
+          keys: { type: 'string', description: 'Category key or emoji.' },
+          values: { type: 'string', description: 'Custom display label.' },
+        },
+      };
+      break;
+  }
+  return describeFields(fields, SCHEMAS[command].required);
+}
+
+function schemaOutput(command) {
+  const [group, action] = command.split('.');
+  return {
+    command, ...SCHEMAS[command],
+    inputType: HELP.commands[group][action].inputType,
+    fields: schemaFields(command),
+    invocation: HELP.commands[group][action].example,
+  };
+}
+
 async function ensureUserRecord(auth) {
   const current = await dbGet(`/users/${auth.uid}`, auth);
   if (current && typeof current === 'object') return;
@@ -947,9 +1081,8 @@ async function main() {
   if (flags.help || group === '--help' || !group) return printJson(ok({ help: helpText(group, command) }));
 
   if (group === 'schema') {
-    const schema = SCHEMAS[command];
-    if (!schema) throw Object.assign(new Error(`Unknown schema command: ${command}`), { cliCode: 'INVALID_INPUT', details: {} });
-    return printJson(ok({ command, ...schema }));
+    if (!Object.hasOwn(SCHEMAS, command)) throw Object.assign(new Error(`Unknown schema command: ${command}`), { cliCode: 'INVALID_INPUT', details: {} });
+    return printJson(ok(schemaOutput(command)));
   }
 
   if (group === 'auth' && command === 'login') {
@@ -1104,7 +1237,12 @@ async function main() {
   if (group === 'categories' && command === 'set') {
     const groupId = requireFlag(flags, 'group-id');
     const inputData = readInput(flags.input);
-    if (!isObject(inputData?.categories)) throw Object.assign(new Error('Missing required field: categories'), { cliCode: 'INVALID_INPUT', details: { help: 'Run `settleup schema categories.set` for the expected JSON input' } });
+    if (!isObject(inputData?.categories)) throw Object.assign(new Error('Missing required field: categories'), { cliCode: 'INVALID_INPUT', details: {} });
+    for (const [key, label] of Object.entries(inputData.categories)) {
+      if (typeof label !== 'string') {
+        throw Object.assign(new Error(`Invalid category label: categories.${key}`), { cliCode: 'INVALID_INPUT', details: {} });
+      }
+    }
     const patch = await dbPatch(`/groupCategories/${groupId}`, auth, inputData.categories);
     return printJson(ok({ groupId, categories: patch }));
   }
@@ -1196,6 +1334,49 @@ async function main() {
   });
 }
 
+function recoveryDetails(error) {
+  const details = { ...(error.details || {}) };
+  const { positional } = parseArgs(process.argv.slice(2));
+  const [group, command] = positional;
+  const definition = HELP.commands[group]?.[command];
+  const operation = `${group}.${command}`;
+  const code = ERROR_CODES.has(error.cliCode) ? error.cliCode : 'API_REQUEST_FAILED';
+
+  if (code === 'INVALID_INPUT') {
+    if (details.variable) {
+      details.help = 'Configure the indicated environment variable for the selected environment; see https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md.';
+    } else if (definition) {
+      details.commandHelp = `settleup ${group} ${command} --help`;
+      details.help = Object.hasOwn(SCHEMAS, operation)
+        ? `Run \`settleup schema ${operation}\` for field types and an example; run \`${details.commandHelp}\` for flags.`
+        : `Run \`${details.commandHelp}\` for required flags and usage.`;
+    } else if (group === 'schema') {
+      details.help = 'Use a supported operation such as `settleup schema expenses.create`.';
+      details.availableSchemas = Object.keys(SCHEMAS);
+    } else {
+      details.help = 'Run `settleup --help` to discover supported commands.';
+    }
+    return details;
+  }
+
+  const help = {
+    AUTH_REQUIRED: 'Run `settleup auth login` privately in your terminal, then retry.',
+    AUTH_INVALID: 'Check email/password sign-in. For Google or Apple accounts, follow https://settleup.app/migrate-account, then run `settleup auth login` privately.',
+    AUTH_REFRESH_FAILED: 'Run `settleup auth login` privately to renew the session, then retry.',
+    GROUP_NOT_FOUND: 'Run `settleup groups list` and use an exact returned group ID.',
+    GROUP_ACCESS_DENIED: 'Confirm the group ID and the signed-in account\'s access using `settleup groups list`.',
+    MEMBER_NOT_FOUND: 'Run `settleup members list --group-id <groupId>` and use returned member IDs, not account uids.',
+    TRANSACTION_NOT_FOUND: 'Run `settleup transactions list --group-id <groupId>` and use an exact returned transaction ID.',
+    API_RATE_LIMITED: 'Wait before retrying; use increasing delays if rate limiting continues.',
+    API_REQUEST_FAILED: definition?.inputType || definition?.operation === 'deletes a record'
+      ? 'Check connectivity and backend availability. Read back the affected data before retrying a write; a create may already have succeeded.'
+      : 'Check connectivity and backend availability before retrying.',
+    SERVER_TASK_FAILED: 'Check the group ID and access, then re-read debts; recalculation may not have completed.',
+  };
+  details.help ??= help[code];
+  return details;
+}
+
 main().catch((error) => {
-  printJson(fail(error.cliCode || 'API_REQUEST_FAILED', error.message, error.details || {}), 1);
+  printJson(fail(error.cliCode || 'API_REQUEST_FAILED', error.message, recoveryDetails(error)), 1);
 });
