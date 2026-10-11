@@ -1,262 +1,191 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-
 import {
-  ERROR_CODES,
-  authLoginData,
-  authStatusData,
-  changeRecordSample,
-  createGroupInput,
-  debtsSample,
-  errorEnvelope,
-  expenseInput,
-  groupRecordSample,
-  memberInput,
-  memberPatchInput,
-  permissionRecordSample,
-  setCategoriesInput,
-  serverTaskRequestSample,
-  successEnvelope,
-  transactionItem,
-  transactionPatchInput,
-  transferInput,
-  userGroupRecordSample,
-  userRecordSample,
-  weightedMemberRef,
+  createGroupInput, expenseInput, transferInput, memberInput,
+  transactionPatchInput, groupRecordSample, userGroupRecordSample,
+  permissionRecordSample, userRecordSample, changeRecordSample, debtsSample,
 } from './helpers/spec-fixtures.mjs';
 import {
-  applyPatchSemantics,
-  assertChangeRecordShape,
-  assertCreateGroupInput,
-  assertDebtsShape,
-  assertErrorEnvelopeShape,
-  assertExpenseInput,
-  assertGroupRecordShape,
-  assertMemberInput,
-  assertPermissionRecordShape,
-  assertSetCategoriesInput,
-  assertServerTaskRequestShape,
-  assertSuccessEnvelopeShape,
-  assertTransactionItem,
-  assertTransactionPatchInput,
-  assertTransferInput,
-  assertUserGroupRecordShape,
-  assertUserRecordShape,
-  assertWeightedMemberRef,
-  isCurrencyCode,
-  isDecimalString,
-  isEpochMillis,
-  isTimezoneOffset,
-} from './helpers/spec-validators.mjs';
+  runAuthenticatedCli, groupFlags, memberFlags, transactionFlags, membersResponse,
+} from './helpers/cli-harness.mjs';
 
-test('success envelope matches the spec', () => {
-  assertSuccessEnvelopeShape(assert, successEnvelope);
-});
+function assertSuccess(result) {
+  assert.equal(result.status, 0, JSON.stringify(result.output));
+  assert.equal(result.output.ok, true);
+  assert.deepEqual(result.output.meta, { environment: 'test' });
+}
 
-test('error envelope matches the spec and uses a stable error code', () => {
-  assertErrorEnvelopeShape(assert, errorEnvelope, ERROR_CODES);
-});
+function schemaExample(command) {
+  const result = runAuthenticatedCli(['schema', command]);
+  assertSuccess(result);
+  return result.output.data.example;
+}
 
-test('error code set is fixed and complete per the spec', () => {
-  assert.deepEqual(ERROR_CODES, [
-    'AUTH_REQUIRED',
-    'AUTH_INVALID',
-    'AUTH_REFRESH_FAILED',
-    'INVALID_INPUT',
-    'GROUP_NOT_FOUND',
-    'GROUP_ACCESS_DENIED',
-    'MEMBER_NOT_FOUND',
-    'TRANSACTION_NOT_FOUND',
-    'API_REQUEST_FAILED',
-    'API_RATE_LIMITED',
-    'SERVER_TASK_FAILED',
+for (const [command, fixture] of [['expenses', expenseInput], ['transfers', transferInput]]) {
+  test(`${command} create validates members and posts the exact transaction`, () => {
+    const input = { ...fixture, exchangeRates: { USD: '0.012' } };
+    const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
+      input, responses: [membersResponse, { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_created' } }],
+    });
+    assertSuccess(result);
+    assert.deepEqual(result.requests[1].body, input);
+    assert.deepEqual(result.requests[1].headers, { 'content-type': 'application/json' });
+    assert.deepEqual(result.output.data, { transactionId: 'tx_created', transaction: input });
+  });
+}
+
+test('groups create sends permissions before group metadata and maps the returned first member ID', () => {
+  const input = schemaExample('groups.create');
+  const result = runAuthenticatedCli(['groups', 'create', '--input', '-'], {
+    input,
+    responses: [
+      { method: 'PUT', pathPattern: '^/permissions/codex-[^/]+/u_test\\.json$', body: { level: 30 } },
+      { method: 'GET', pathPattern: '^/groups/codex-[^/]+\\.json$', body: null },
+      { method: 'PATCH', pathPattern: '^/groups/codex-[^/]+\\.json$', body: {} },
+      { method: 'POST', pathPattern: '^/members/codex-[^/]+\\.json$', body: { name: 'm_created' } },
+      { method: 'PUT', pathPattern: '^/userGroups/u_test/codex-[^/]+\\.json$', body: {} },
+      { method: 'PUT', path: '/users/u_test/currentTabId.json', body: null },
+    ],
+  });
+  assertSuccess(result);
+  const { groupId } = result.output.data;
+  assert.deepEqual(result.requests.map(({ path }) => path), [
+    `/permissions/${groupId}/u_test.json`, `/groups/${groupId}.json`, `/groups/${groupId}.json`,
+    `/members/${groupId}.json`, `/userGroups/u_test/${groupId}.json`, '/users/u_test/currentTabId.json',
   ]);
-});
-
-test('auth login/status payloads use uid and epoch millis, not memberId', () => {
-  assert.equal(typeof authLoginData.uid, 'string');
-  assert.equal(typeof authStatusData.uid, 'string');
-  assert.ok(isEpochMillis(authLoginData.expiresAt));
-  assert.ok(isEpochMillis(authStatusData.expiresAt));
-  assert.equal(authStatusData.authenticated, true);
-  assert.ok(!Object.hasOwn(authLoginData, 'memberId'));
-  assert.ok(!Object.hasOwn(authStatusData, 'memberId'));
-});
-
-test('amount and weight validation uses decimal strings, never floats', () => {
-  assert.equal(isDecimalString('1'), true);
-  assert.equal(isDecimalString('1.5'), true);
-  assert.equal(isDecimalString('2400'), true);
-  assert.equal(isDecimalString(1.5), false);
-  assert.equal(isDecimalString('01'), false);
-  assert.equal(isDecimalString('-1'), false);
-  assert.equal(isDecimalString('abc'), false);
-});
-
-test('shared primitive formats match the spec rules', () => {
-  assert.equal(isCurrencyCode('INR'), true);
-  assert.equal(isCurrencyCode('usd'), false);
-  assert.equal(isCurrencyCode('USDT'), false);
-  assert.equal(isEpochMillis(1777824000000), true);
-  assert.equal(isEpochMillis(Date.now()), true);
-  assert.equal(isEpochMillis('1777824000000'), false);
-  assert.equal(isTimezoneOffset('+05:30'), true);
-  assert.equal(isTimezoneOffset('-07:00'), true);
-  assert.equal(isTimezoneOffset('Asia/Kolkata'), false);
-});
-
-test('weighted member refs use memberId and decimal weight', () => {
-  assertWeightedMemberRef(assert, weightedMemberRef);
-  assert.ok(!Object.hasOwn(weightedMemberRef, 'uid'));
-});
-
-test('transaction items use decimal-string amounts and weighted member refs', () => {
-  assertTransactionItem(assert, transactionItem);
-});
-
-test('group creation input matches the documented schema', () => {
-  assertCreateGroupInput(assert, createGroupInput);
-});
-
-test('member input and patch input match the documented schema', () => {
-  assertMemberInput(assert, memberInput);
-  assertMemberInput(assert, memberPatchInput, { partial: true });
-});
-
-test('categories input is a string to string mapping', () => {
-  assertSetCategoriesInput(assert, setCategoriesInput);
-});
-
-test('group records match the official data-entities sample shape', () => {
-  assertGroupRecordShape(assert, groupRecordSample);
-});
-
-test('permission records use user uid access levels 10, 20, 30', () => {
-  assertPermissionRecordShape(assert, permissionRecordSample);
-});
-
-test('user records match the official data-entities sample shape', () => {
-  assertUserRecordShape(assert, userRecordSample);
-});
-
-test('userGroup records expose order, color, and optional member mapping', () => {
-  assertUserGroupRecordShape(assert, userGroupRecordSample);
-});
-
-test('expense input matches the documented schema and formats', () => {
-  assertExpenseInput(assert, expenseInput);
-});
-
-test('transfer input matches the documented schema and preserves transfer type', () => {
-  assertTransferInput(assert, transferInput);
-});
-
-test('transaction patch input matches the documented patch schema', () => {
-  assertTransactionPatchInput(assert, transactionPatchInput);
-});
-
-test('member patch semantics preserve omitted fields and allow null clearing', () => {
-  const original = {
-    name: 'Sid',
-    active: true,
-    defaultWeight: '1',
-    photoUrl: 'https://example.com/avatar.png',
-    bankAccount: 'bank-1',
-    lightningAddress: 'sid@ln',
-  };
-  const patch = {
-    name: 'Siddharth',
-    photoUrl: null,
-  };
-
-  const merged = applyPatchSemantics(original, patch);
-
-  assert.deepEqual(merged, {
-    name: 'Siddharth',
-    active: true,
-    defaultWeight: '1',
-    photoUrl: null,
-    bankAccount: 'bank-1',
-    lightningAddress: 'sid@ln',
+  assert.deepEqual(result.requests[0].body, { level: 30 });
+  assert.deepEqual(result.requests[2].body, {
+    name: createGroupInput.name, convertedToCurrency: 'INR', defaultPermission: 10,
+    minimizeDebts: true, remindOldDebts: true, ownerColor: '#ec1561', inviteLinkActive: true,
   });
+  assert.deepEqual(result.requests[3].body, createGroupInput.firstMember);
+  assert.deepEqual(result.requests[4].body, { order: 1, color: '#ec1561', member: 'm_created' });
+  assert.equal(result.requests[5].body, groupId);
+  assert.equal(result.output.data.firstMemberId, 'm_created');
 });
 
-test('transaction patch semantics replace provided arrays and preserve omitted fields', () => {
-  const original = {
-    type: 'expense',
-    purpose: 'Dinner',
-    category: '🍽️',
-    currencyCode: 'INR',
-    whoPaid: [
-      { memberId: 'm_sid', weight: '1' },
-      { memberId: 'm_neha', weight: '1' },
-    ],
-    items: [
-      {
-        amount: '2400',
-        forWhom: [
-          { memberId: 'm_sid', weight: '1' },
-          { memberId: 'm_neha', weight: '1' },
-        ],
-      },
-    ],
-    exchangeRates: {
-      USD: '0.012',
-    },
-  };
-  const patch = {
-    purpose: 'Dinner at Thalassa',
-    items: [
-      {
-        amount: '2500',
-        forWhom: [
-          { memberId: 'm_sid', weight: '1' },
-          { memberId: 'm_neha', weight: '1' },
-          { memberId: 'm_rohan', weight: '1' },
-        ],
-      },
-    ],
-  };
-
-  const merged = applyPatchSemantics(original, patch);
-
-  assert.deepEqual(merged, {
-    type: 'expense',
-    purpose: 'Dinner at Thalassa',
-    category: '🍽️',
-    currencyCode: 'INR',
-    whoPaid: [
-      { memberId: 'm_sid', weight: '1' },
-      { memberId: 'm_neha', weight: '1' },
-    ],
-    items: [
-      {
-        amount: '2500',
-        forWhom: [
-          { memberId: 'm_sid', weight: '1' },
-          { memberId: 'm_neha', weight: '1' },
-          { memberId: 'm_rohan', weight: '1' },
-        ],
-      },
-    ],
-    exchangeRates: {
-      USD: '0.012',
-    },
+test('members add sends the input and uses the backend-generated member ID', () => {
+  const input = schemaExample('members.add');
+  const result = runAuthenticatedCli(['members', 'add', ...groupFlags, '--input', '-'], {
+    input, responses: [{ method: 'POST', path: '/members/g_test.json', body: { name: 'm_created' } }],
   });
+  assertSuccess(result);
+  assert.deepEqual(result.requests[0].body, memberInput);
+  assert.deepEqual(result.output.data, { memberId: 'm_created', member: memberInput });
 });
 
-test('update payload must not try to patch transaction type', () => {
-  assert.equal(Object.hasOwn(transactionPatchInput, 'type'), false);
+test('members update sends only provided fields and explicit null clearing', () => {
+  const input = { ...schemaExample('members.update'), photoUrl: null };
+  const result = runAuthenticatedCli(['members', 'update', ...memberFlags, '--input', '-'], {
+    input, responses: [{ method: 'PATCH', path: '/members/g_test/m_sid.json', body: input }],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.requests[0].body, input);
+  assert.deepEqual(result.output.data, { memberId: 'm_sid', patch: input });
 });
 
-test('change records match the official data-entities sample shape', () => {
-  assertChangeRecordShape(assert, changeRecordSample);
+for (const [name, input, responses] of [
+  ['supplied arrays', { ...transactionPatchInput, whoPaid: [{ memberId: 'm_neha', weight: '1' }] }, [membersResponse]],
+  ['supplied object and null clearing', { exchangeRates: { USD: '0.012' }, receiptUrl: null, templateId: null }, []],
+  ['purpose', { purpose: 'Updated dinner' }, []],
+]) {
+  test(`transactions update sends only ${name} in the PATCH body`, () => {
+    const result = runAuthenticatedCli(['transactions', 'update', ...transactionFlags, '--input', '-'], {
+      input, responses: [...responses, { method: 'PATCH', path: '/transactions/g_test/tx_test.json', body: input }],
+    });
+    assertSuccess(result);
+    assert.deepEqual(result.requests.at(-1).body, input);
+    assert.deepEqual(result.output.data, { transactionId: 'tx_test', patch: input });
+  });
+}
+
+test('categories set unwraps the categories mapping into its PATCH request', () => {
+  const input = schemaExample('categories.set');
+  const result = runAuthenticatedCli(['categories', 'set', ...groupFlags, '--input', '-'], {
+    input,
+    responses: [{ method: 'PATCH', path: '/groupCategories/g_test.json', body: input.categories }],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.requests[0].body, input.categories);
+  assert.deepEqual(result.output.data, { groupId: 'g_test', categories: input.categories });
 });
 
-test('debts are arrays of member-to-member balances with decimal-string amounts', () => {
-  assertDebtsShape(assert, debtsSample);
+for (const command of ['expenses', 'transfers']) {
+  test(`${command} create accepts its advertised schema example unchanged`, () => {
+    const input = schemaExample(`${command}.create`);
+    const result = runAuthenticatedCli([command, 'create', ...groupFlags, '--input', '-'], {
+      input, responses: [
+        { ...membersResponse, body: { member_id_1: { name: 'Example payer' }, member_id_2: { name: 'Example recipient' } } },
+        { method: 'POST', path: '/transactions/g_test.json', body: { name: 'tx_example' } },
+      ],
+    });
+    assertSuccess(result);
+    assert.deepEqual(result.requests[1].body, input);
+  });
+}
+
+test('transactions update accepts its advertised schema example unchanged', () => {
+  const input = schemaExample('transactions.update');
+  const result = runAuthenticatedCli(['transactions', 'update', ...transactionFlags, '--input', '-'], {
+    input, responses: [
+      { ...membersResponse, body: { member_id_1: { name: 'Example member' } } },
+      { method: 'PATCH', path: '/transactions/g_test/tx_test.json', body: input },
+    ],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.requests[1].body, input);
 });
 
-test('server task payloads wrap parameters inside request', () => {
-  assertServerTaskRequestShape(assert, serverTaskRequestSample);
+test('debts recalculate builds the request wrapper itself', () => {
+  const result = runAuthenticatedCli(['debts', 'recalculate', ...groupFlags], {
+    responses: [{ method: 'POST', path: '/serverTasks/calculateDebts.json', body: { name: 'task_created' } }],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.requests[0].body, { request: { groupId: 'g_test' } });
+  assert.deepEqual(result.output.data, { groupId: 'g_test', taskId: 'task_created' });
 });
+
+test('groups get preserves backend group, permission and userGroup records', () => {
+  const permissions = { u_test: permissionRecordSample };
+  const result = runAuthenticatedCli(['groups', 'get', ...groupFlags], {
+    responses: [
+      { method: 'GET', path: '/groups/g_test.json', body: groupRecordSample },
+      { method: 'GET', path: '/permissions/g_test.json', body: permissions },
+      { method: 'GET', path: '/userGroups/u_test/g_test.json', body: userGroupRecordSample },
+    ],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.output.data, { id: 'g_test', group: groupRecordSample, permissions, userGroup: userGroupRecordSample });
+});
+
+test('users me keeps the auth UID separate from backend profile fields', () => {
+  const result = runAuthenticatedCli(['users', 'me'], {
+    responses: [{ method: 'GET', path: '/users/u_test.json', body: userRecordSample }],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.output.data, { uid: 'u_test', user: userRecordSample });
+});
+
+test('changes list adds IDs to backend change records', () => {
+  const result = runAuthenticatedCli(['changes', 'list', ...groupFlags], {
+    responses: [{ method: 'GET', path: '/changes/g_test.json', body: { change_1: changeRecordSample } }],
+  });
+  assertSuccess(result);
+  assert.deepEqual(result.output.data, { groupId: 'g_test', count: 1, changes: [{ id: 'change_1', ...changeRecordSample }] });
+});
+
+for (const [name, body, debts] of [
+  ['array', debtsSample, debtsSample],
+  ['nested map', { m_sid: { m_neha: '100.50', m_rohan: 25 } }, [
+    { from: 'm_sid', to: 'm_neha', amount: '100.50' }, { from: 'm_sid', to: 'm_rohan', amount: '25' },
+  ]],
+  ['empty response', null, []],
+]) {
+  test(`debts list normalizes a backend ${name}`, () => {
+    const result = runAuthenticatedCli(['debts', 'list', ...groupFlags], {
+      responses: [{ method: 'GET', path: '/debts/g_test.json', body }],
+    });
+    assertSuccess(result);
+    assert.deepEqual(result.output.data, { groupId: 'g_test', debts });
+  });
+}

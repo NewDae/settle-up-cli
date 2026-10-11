@@ -1,50 +1,3 @@
-export const ERROR_CODES = [
-  'AUTH_REQUIRED',
-  'AUTH_INVALID',
-  'AUTH_REFRESH_FAILED',
-  'INVALID_INPUT',
-  'GROUP_NOT_FOUND',
-  'GROUP_ACCESS_DENIED',
-  'MEMBER_NOT_FOUND',
-  'TRANSACTION_NOT_FOUND',
-  'API_REQUEST_FAILED',
-  'API_RATE_LIMITED',
-  'SERVER_TASK_FAILED',
-];
-
-export const successEnvelope = {
-  ok: true,
-  data: {},
-  meta: {
-    environment: 'test',
-  },
-};
-
-export const errorEnvelope = {
-  ok: false,
-  error: {
-    code: 'GROUP_NOT_FOUND',
-    message: 'Group g123 was not found',
-    details: {},
-  },
-  meta: {
-    environment: 'test',
-  },
-};
-
-export const authLoginData = {
-  uid: 'u1',
-  email: 'me@example.com',
-  expiresAt: 1777872000000,
-};
-
-export const authStatusData = {
-  authenticated: true,
-  uid: 'u1',
-  email: 'me@example.com',
-  expiresAt: 1777872000000,
-};
-
 export const createGroupInput = {
   name: 'Goa Trip',
   convertedToCurrency: 'INR',
@@ -140,25 +93,6 @@ export const debtsSample = [
     amount: '100.50',
   },
 ];
-
-export const serverTaskRequestSample = {
-  request: {
-    groupId: 'group_id_1',
-  },
-};
-
-export const weightedMemberRef = {
-  memberId: 'm_sid',
-  weight: '1',
-};
-
-export const transactionItem = {
-  amount: '2400',
-  forWhom: [
-    { memberId: 'm_sid', weight: '1' },
-    { memberId: 'm_neha', weight: '1' },
-  ],
-};
 
 export const expenseInput = {
   type: 'expense',

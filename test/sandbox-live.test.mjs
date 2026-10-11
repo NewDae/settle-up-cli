@@ -1,10 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldRunLiveSandboxTests } from './helpers/spec-validators.mjs';
-
 const env = process.env;
-const runLive = shouldRunLiveSandboxTests(env);
+const runLive = env.SETTLEUP_RUN_LIVE === '1';
 const firebaseApiKey = env.SETTLEUP_FIREBASE_API_KEY || '';
 const backendBaseUrl = env.SETTLEUP_API_BASE_URL || '';
 
