@@ -80,11 +80,12 @@ For additional tasks, use `settleup --help` or `<command> --help`. This CLI is a
 Read stdout as JSON: success is `{ "ok": true, "data": ..., "meta": ... }`; failure is `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }` with a nonzero exit code. Interactive login prompts go to stderr.
 
 - AUTH_REQUIRED / AUTH_REFRESH_FAILED: ask the user to sign in privately again.
+- AUTH_STORAGE_FAILED: ask the user to unlock or enable the OS credential store. Plaintext storage requires their explicit choice; never silently switch it.
 - AUTH_INVALID: check email/password sign-in and account migration.
 - GROUP_ACCESS_DENIED: confirm the group and the user's access.
 - API_RATE_LIMITED: wait and retry with backoff.
 
-Update with `npm install -g settle-up-cli@latest`. Sign out with `settleup auth logout` to remove the local session. Sessions use `~/.config/settleup-cli/<environment>/auth.json` by default (Unix directory mode 0700, file mode 0600), not an OS keychain. For auth configuration and overrides, see [the login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md).
+Update with `npm install -g settle-up-cli@latest`. Sign out with `settleup auth logout` to remove the local session. Sessions use the OS credential store by default. Plaintext file storage requires explicit `SETTLEUP_AUTH_STORAGE=file`. For auth configuration and overrides, see [the login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md).
 
 ## Enjoyed using it?
 

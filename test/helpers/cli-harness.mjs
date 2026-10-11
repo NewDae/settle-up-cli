@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const cliPath = fileURLToPath(new URL('../../bin/settleup.mjs', import.meta.url));
 
@@ -47,13 +47,14 @@ globalThis.fetch = async (url, options = {}) => {
 `);
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
       !key.startsWith('SETTLEUP_') && key !== 'NODE_OPTIONS'));
-    const result = spawnSync(process.execPath, ['--import', mockPath, cliPath, ...args], {
+    const result = spawnSync(process.execPath, ['--import', pathToFileURL(mockPath).href, cliPath, ...args], {
       cwd: dir, encoding: 'utf8', timeout: 10_000,
       input: inputText ?? (input === undefined ? undefined : JSON.stringify(input)),
       env: {
         ...env, SETTLEUP_ENV: 'test', SETTLEUP_CLI_CONFIG_DIR: path.join(dir, 'config'),
         SETTLEUP_API_BASE_URL: 'https://cli-test.invalid',
         SETTLEUP_AUTH_BASE_URL: 'https://cli-test.invalid', SETTLEUP_FIREBASE_API_KEY: '',
+        SETTLEUP_AUTH_STORAGE: 'file',
       },
     });
     assert.ifError(result.error);

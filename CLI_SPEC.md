@@ -66,6 +66,7 @@ Stable error codes:
 - `AUTH_REQUIRED`
 - `AUTH_INVALID`
 - `AUTH_REFRESH_FAILED`
+- `AUTH_STORAGE_FAILED`
 - `INVALID_INPUT`
 - `GROUP_NOT_FOUND`
 - `GROUP_ACCESS_DENIED`
@@ -82,7 +83,7 @@ The executable is `settleup`. Write JSON is supplied with `--input <path>` or `-
 | Command | Required flags / input | Behavior |
 |---|---|---|
 | `auth login` | None | Email/password sign-in; store a local session. Private interactive input is the user/agent workflow; non-TTY automation accepts email and password on separate stdin lines. |
-| `auth status` | None | Report local session presence, `uid`, email, expiry; does not confirm live access. |
+| `auth status` | None | Report local session presence, selected `storage`, `uid`, email, expiry; does not confirm live access. |
 | `auth logout` | None | Delete the local session. |
 | `users me` | None | Fetch the authenticated user's profile. |
 | `groups list` | None | List groups accessible to the current user. |
@@ -112,7 +113,7 @@ Auth/login and status examples:
 ```
 
 ```json
-{ "ok": true, "data": { "authenticated": true, "uid": "u1", "email": "me@example.com", "expiresAt": 1777872000000 }, "meta": { "environment": "staging" } }
+{ "ok": true, "data": { "authenticated": true, "storage": "keyring", "uid": "u1", "email": "me@example.com", "expiresAt": 1777872000000 }, "meta": { "environment": "staging" } }
 ```
 
 With no session, status reports `authenticated: false` and null identity/expiry fields. Tokens and login configuration are described in [LOGIN.md](LOGIN.md).
@@ -448,7 +449,7 @@ The original design principles remain the basis of the CLI. This table preserves
 | No hidden lookup before writes | Exact-ID member validation performs a backend read before transaction writes; group creation reads its permission-created stub. No fuzzy name lookup is added. |
 | Interactive login only | Private interactive sign-in remains the recommended user/agent workflow. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
 | Do not bundle project configuration; require runtime config | Published package bundles production database/hosted-auth URLs for zero-config use, but no Firebase key or user/session secrets. Environment overrides remain available. |
-| Prefer OS keychain, with restricted-file fallback | Keychain remains an unimplemented preference. Current storage uses per-environment files with Unix directory/file modes 0700/0600; details in [LOGIN.md](LOGIN.md). |
+| Prefer OS keychain, with restricted-file fallback | Implemented: OS credential store by default; plaintext requires explicit `SETTLEUP_AUTH_STORAGE=file`. Sessions are isolated by config directory, environment, and endpoints, with verified legacy migration and storage-specific recovery; details in [LOGIN.md](LOGIN.md#credential-storage). |
 | Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |
 | Every write command and validation error directs callers to schema help | Implemented for input-taking write validation. Flag-only deletion/recalculation points to command help; auth, configuration, permissions, and service errors give relevant recovery guidance. |
 

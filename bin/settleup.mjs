@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import { createSessionStore } from './lib/session-store.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
@@ -17,12 +18,16 @@ const AUTH_BASE_URL = (process.env.SETTLEUP_AUTH_BASE_URL || DEFAULT_AUTH_BASE_U
 const FIREBASE_API_KEY = process.env.SETTLEUP_FIREBASE_API_KEY || '';
 const CONFIG_DIR = process.env.SETTLEUP_CLI_CONFIG_DIR
   || path.join(os.homedir(), '.config', 'settleup-cli');
-const AUTH_PATH = path.join(CONFIG_DIR, ENVIRONMENT, 'auth.json');
+const sessionStore = createSessionStore({
+  configDir: CONFIG_DIR, environment: ENVIRONMENT, apiBaseUrl: API_BASE_URL,
+  authBaseUrl: AUTH_BASE_URL, storage: process.env.SETTLEUP_AUTH_STORAGE || 'keyring',
+});
 const META = { environment: ENVIRONMENT };
 const ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   'AUTH_INVALID',
   'AUTH_REFRESH_FAILED',
+  'AUTH_STORAGE_FAILED',
   'INVALID_INPUT',
   'GROUP_NOT_FOUND',
   'GROUP_ACCESS_DENIED',
@@ -148,24 +153,6 @@ function parseArgs(argv) {
   return { positional, flags };
 }
 
-function ensureConfigDir() {
-  fs.mkdirSync(path.dirname(AUTH_PATH), { recursive: true, mode: 0o700 });
-}
-
-function readAuthFile() {
-  try {
-    return JSON.parse(fs.readFileSync(AUTH_PATH, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeAuthFile(auth) {
-  ensureConfigDir();
-  fs.writeFileSync(AUTH_PATH, JSON.stringify(auth, null, 2), { mode: 0o600 });
-  if (process.platform !== 'win32') fs.chmodSync(AUTH_PATH, 0o600);
-}
-
 async function promptCredentials() {
   let hideOutput = false;
   const output = new Writable({
@@ -194,12 +181,6 @@ async function promptCredentials() {
     promptOutput.write('\n');
     rl.close();
   }
-}
-
-function deleteAuthFile() {
-  try {
-    fs.unlinkSync(AUTH_PATH);
-  } catch {}
 }
 
 async function fetchJson(url, options = {}) {
@@ -293,12 +274,12 @@ async function refreshAuth(auth) {
       details: { required: ['accessToken', 'refreshToken', 'uid', 'expiresAt'] },
     });
   }
-  writeAuthFile(next);
+  await sessionStore.write(next);
   return next;
 }
 
 async function requireAuth() {
-  const auth = readAuthFile();
+  const auth = await sessionStore.read();
   if (!(auth?.accessToken || auth?.idToken) || !auth?.refreshToken || !auth?.uid) {
     throw Object.assign(new Error('Run `settleup auth login` first'), {
       cliCode: 'AUTH_REQUIRED',
@@ -309,6 +290,7 @@ async function requireAuth() {
     try {
       return await refreshAuth(auth);
     } catch (error) {
+      if (error.cliCode === 'AUTH_STORAGE_FAILED') throw error;
       throw Object.assign(new Error('Stored session could not be refreshed'), {
         cliCode: 'AUTH_REFRESH_FAILED',
         details: { cause: error.message },
@@ -610,7 +592,7 @@ const HELP = {
     auth: {
       login: {
         synopsis: 'settleup auth login',
-        purpose: 'Authenticate user and store local session.',
+        purpose: 'Authenticate user and store the session in the OS credential store (or explicit file storage).',
         operation: 'authenticates',
         requiredFlags: [],
         optionalFlags: [],
@@ -619,7 +601,7 @@ const HELP = {
       },
       status: {
         synopsis: 'settleup auth status',
-        purpose: 'Show whether a local session is available.',
+        purpose: 'Show selected credential storage and whether a local session is available.',
         operation: 'reads local session',
         requiredFlags: [],
         optionalFlags: [],
@@ -1097,6 +1079,7 @@ async function main() {
     }
     assertNonEmptyString(email, 'email');
     assertNonEmptyString(password, 'password');
+    await sessionStore.check();
     const json = FIREBASE_API_KEY
       ? await signInWithFirebase(email, password)
       : unwrapApiEnvelope(await fetchJson(authUrl('/auth/login'), {
@@ -1119,15 +1102,16 @@ async function main() {
         details: { required: ['accessToken', 'refreshToken', 'uid', 'expiresAt'] },
       });
     }
-    writeAuthFile(auth);
+    await sessionStore.write(auth);
     await ensureUserRecord(auth);
     return printJson(ok({ uid: auth.uid, email: auth.email, expiresAt: auth.expiresAt }));
   }
 
   if (group === 'auth' && command === 'status') {
-    const auth = readAuthFile();
+    const auth = await sessionStore.read();
     return printJson(ok({
       authenticated: Boolean((auth?.accessToken || auth?.idToken) && auth?.refreshToken),
+      storage: sessionStore.storage,
       uid: auth?.uid || null,
       email: auth?.email || null,
       expiresAt: auth?.expiresAt || null,
@@ -1135,7 +1119,7 @@ async function main() {
   }
 
   if (group === 'auth' && command === 'logout') {
-    deleteAuthFile();
+    await sessionStore.delete();
     return printJson(ok({ authenticated: false }));
   }
 

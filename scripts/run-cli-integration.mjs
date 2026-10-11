@@ -122,6 +122,7 @@ function runCli(args, { inputJson, inputText, displayCommand, check }) {
       env: {
         ...process.env,
         SETTLEUP_CLI_CONFIG_DIR: configDir,
+        SETTLEUP_AUTH_STORAGE: 'file',
       },
       stdio: ['pipe', 'pipe', 'pipe'],
     });
