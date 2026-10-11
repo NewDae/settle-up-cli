@@ -72,15 +72,23 @@ Before the first production deployment:
 4. Run `npm run docs:sync`, `npm test`, and `npm run docs:check`.
 5. Deploy from the repository root with `npx wrangler pages deploy docs --project-name settleupcli`. Deploying only static files without Functions will not enable login. Publish a CLI release with the browser flags after checking the live site.
 
-Local development: apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --local`, run the auth Worker locally with `--env staging` in its own repository, then run `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`. Use `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` with matching local/staging API/auth configuration. The public website uses no third-party scripts on the login page; CSP allows only same-origin requests. Keep request-body logging disabled in both hosted services and any proxy.
+Local development: apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --local`, run the auth Worker locally with `npm run auth:dev`, then run `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`. Use `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` with matching local/staging API/auth configuration. The public website uses no third-party scripts on the login page; CSP allows only same-origin requests. Keep request-body logging disabled in both hosted services and any proxy.
 
 `npm run docs:sync` also copies shared login cryptography to `docs/login-crypto.js` and updates the embedded machine guide. Login endpoint tests use real SQLite SQL, a local HTTP server, the real CLI executable, and a stub of the existing auth Worker. They do not verify production bindings or actual Firebase credentials.
+
+## Auth Worker source
+
+The complete hosted auth implementation lives in [server/auth-worker/](server/auth-worker/README.md), alongside the CLI and website. Its source and deployment configuration were imported unchanged. `npm test` includes its login, refresh, validation, rate-limit, and credential-logging checks.
+
+Use `npm run auth:dev` for local staging development, or the explicit `auth:deploy:staging` / `auth:deploy:production` scripts for authorized deployments. These target the existing Workers and preserve their secret bindings; no live secrets were moved into this repository. Keep Worker local development secrets in ignored files under `server/auth-worker/`, separate from root CLI environment files. See the Worker README for configuration and the limits of public-source verification.
 
 ## Repository map
 
 | Path | Responsibility |
 |---|---|
 | `bin/settleup.mjs` | CLI executable, validation, help, and schema examples. |
+| `server/auth-worker/` | Hosted auth Worker source, deployment configuration, and operating instructions. |
+| `server/browser-login.mjs` | Website pairing and encrypted session handoff. |
 | `bin/lib/session-store.mjs` | Session storage in the OS credential store or explicit file. |
 | `test/` | Public CLI tests and opt-in live backend tests. |
 | `scripts/run-cli-integration.mjs` | Live CLI workflow and dated reports. |

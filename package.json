@@ -21,12 +21,16 @@
   "scripts": {
     "docs:sync": "node scripts/sync-agent-docs.mjs",
     "docs:check": "node scripts/sync-agent-docs.mjs --check",
-    "test": "node --test test/cli-*.test.mjs test/negative-inputs.test.mjs test/spec-contracts.test.mjs test/browser-login.test.mjs",
+    "test": "node --test test/cli-*.test.mjs test/negative-inputs.test.mjs test/spec-contracts.test.mjs test/browser-login.test.mjs test/auth-worker.test.mjs",
     "test:live": "SETTLEUP_RUN_LIVE=1 node --test test/sandbox-live.test.mjs",
     "test:all": "node --test test/*.test.mjs",
     "integration:e2e": "node scripts/run-cli-integration.mjs",
     "integration:e2e:staging": "SETTLEUP_ENV_FILE=.env.staging node scripts/run-cli-integration.mjs",
     "integration:e2e:prod": "SETTLEUP_ENV_FILE=.env.production node scripts/run-cli-integration.mjs",
+    "auth:dev": "cd server/auth-worker && npx wrangler dev --config wrangler.toml --env staging",
+    "auth:deploy:staging": "cd server/auth-worker && npx wrangler deploy --config wrangler.toml --env staging",
+    "auth:deploy:production": "cd server/auth-worker && npx wrangler deploy --config wrangler.toml --env production",
+    "test:auth-worker": "node --test test/auth-worker.test.mjs",
     "test:credentials": "node scripts/test-credential-store.mjs"
   },
   "dependencies": {
