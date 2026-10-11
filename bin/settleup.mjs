@@ -1344,7 +1344,7 @@ function recoveryDetails(error) {
 
   if (code === 'INVALID_INPUT') {
     if (details.variable) {
-      details.help = 'Configure the indicated environment variable for the selected environment; see LOGIN.md and DEVELOPMENT.md.';
+      details.help = 'Configure the indicated environment variable for the selected environment; see https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md.';
     } else if (definition) {
       details.commandHelp = `settleup ${group} ${command} --help`;
       details.help = Object.hasOwn(SCHEMAS, operation)
