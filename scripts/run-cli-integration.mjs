@@ -101,7 +101,7 @@ function calculateDebts(transactions) {
 async function signUpSandboxUser() {
   assert.ok(firebaseApiKey, 'SETTLEUP_FIREBASE_API_KEY is required for integration user signup');
   const email = `cli-e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-  const password = 'CodexTest123!';
+  const password = 'CliTest123!';
   const response = await fetch(
     `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseApiKey)}`,
     {
@@ -115,7 +115,7 @@ async function signUpSandboxUser() {
   return { email, password };
 }
 
-function runCli(args, { inputJson, inputText, displayCommand, check }) {
+function runCli(args, { inputJson, inputText, displayCommand, check, expectFailure = false }) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cliPath, ...args], {
       cwd: repoRoot,
@@ -140,12 +140,14 @@ function runCli(args, { inputJson, inputText, displayCommand, check }) {
         return;
       }
       try {
+        // Surface the CLI's own error rather than a crash inside the check.
+        if (!expectFailure && json.ok !== true) throw new Error(`${json.error?.code}: ${json.error?.message}`);
         const pass = check(json);
         steps.push({
           command: displayCommand || `settleup ${args.join(' ')}`,
           output: json,
           check: pass,
-          passed: code === 0 && json.ok === true,
+          passed: expectFailure ? code !== 0 && json.ok === false : code === 0 && json.ok === true,
         });
         resolve(json);
       } catch (error) {
@@ -164,6 +166,12 @@ function runCli(args, { inputJson, inputText, displayCommand, check }) {
   });
 }
 
+// Drop optional fields so the CLI's create defaults are exercised live.
+function minimal(transaction) {
+  const { fixedExchangeRate, exchangeRates, receiptUrl, templateId, timezone, ...rest } = transaction;
+  return rest;
+}
+
 function tx({ purpose, category, date, payer, split, amount }) {
   return {
     type: 'expense',
@@ -178,6 +186,15 @@ function tx({ purpose, category, date, payer, split, amount }) {
     templateId: null,
     whoPaid: [{ memberId: payer, weight: '1' }],
     items: [{ amount, forWhom: split.map((memberId) => ({ memberId, weight: '1' })) }],
+  };
+}
+
+function expectError(code) {
+  return (json) => {
+    assert.equal(json.ok, false, 'expected the command to fail');
+    assert.equal(json.error.code, code);
+    assert.equal(typeof json.error.details.help, 'string');
+    return `Failed as expected with ${code} and recovery help.`;
   };
 }
 
@@ -217,7 +234,7 @@ async function main() {
 
   const groupCreate = await runCli(['groups', 'create', '--input', '-'], {
     inputJson: {
-      name: `Codex Test ${Date.now()}`,
+      name: `CLI Test ${Date.now()}`,
       convertedToCurrency: 'USD',
       defaultPermission: 10,
       minimizeDebts: true,
@@ -232,30 +249,62 @@ async function main() {
       },
     },
     check: (json) => {
-      assert.equal(typeof json.data.groupId, 'string');
+      assert.match(json.data.groupId, /^[-0-9A-Za-z_]{20}$/);
       assert.equal(typeof json.data.firstMemberId, 'string');
-      return 'Group create used the permission-stub flow and linked the creator member.';
+      return 'Group create used the permission-stub flow, a Firebase push-style group ID, and linked the creator member.';
+    },
+  });
+
+  await runCli(['groups', 'list'], {
+    check: (json) => {
+      assert.ok(json.data.groups.some((group) => group.id === groupCreate.data.groupId));
+      return 'Groups list includes the newly created group.';
     },
   });
 
   const groupId = groupCreate.data.groupId;
   const memberA = groupCreate.data.firstMemberId;
   const memberBCreate = await runCli(['members', 'add', '--group-id', groupId, '--input', '-'], {
-    inputJson: { name: 'Neha', active: true, defaultWeight: '1', photoUrl: null, bankAccount: null, lightningAddress: null },
+    inputJson: { name: 'Neha', active: true, defaultWeight: '1', photoUrl: 'https://example.com/neha.png', bankAccount: null, lightningAddress: null },
     check: (json) => {
       assert.equal(typeof json.data.memberId, 'string');
       return 'Second member was created with a memberId distinct from uid.';
     },
   });
   const memberCCreate = await runCli(['members', 'add', '--group-id', groupId, '--input', '-'], {
-    inputJson: { name: 'Rohan', active: true, defaultWeight: '1', photoUrl: null, bankAccount: null, lightningAddress: null },
+    inputJson: { name: 'Rohan' },
     check: (json) => {
       assert.equal(typeof json.data.memberId, 'string');
-      return 'Third member was created successfully.';
+      assert.equal(json.data.member.active, true);
+      assert.equal(json.data.member.defaultWeight, '1');
+      return 'Third member was created from a name-only input; the CLI filled active and defaultWeight.';
     },
   });
   const memberB = memberBCreate.data.memberId;
   const memberC = memberCCreate.data.memberId;
+
+  await runCli(['members', 'update', '--group-id', groupId, '--member-id', memberB, '--input', '-'], {
+    inputJson: { name: 'Neha S', photoUrl: null },
+    check: (json) => {
+      assert.deepEqual(json.data.patch, { name: 'Neha S', photoUrl: null });
+      return 'Member patch sent only the supplied name and an explicit null photo.';
+    },
+  });
+
+  await runCli(['members', 'get', '--group-id', groupId, '--member-id', memberB], {
+    check: (json) => {
+      const member = json.data;
+      assert.equal(member.name, 'Neha S');
+      assert.equal(member.photoUrl ?? null, null);
+      assert.equal(member.defaultWeight, '1');
+      assert.equal(member.active, true);
+      return 'Backend kept omitted member fields and null cleared the photo.';
+    },
+  });
+
+  await runCli(['members', 'get', '--group-id', groupId, '--member-id', 'missing-member'], {
+    expectFailure: true, check: expectError('MEMBER_NOT_FOUND'),
+  });
 
   await runCli(['members', 'list', '--group-id', groupId, '--active-only'], {
     check: (json) => {
@@ -272,9 +321,25 @@ async function main() {
     },
   });
 
+  await runCli(['categories', 'set', '--group-id', groupId, '--input', '-'], {
+    inputJson: { categories: { transfer: 'Settlement' } },
+    check: (json) => {
+      assert.equal(json.data.categories.transfer, 'Settlement');
+      return 'A second category set supplies only one new label.';
+    },
+  });
+
+  await runCli(['categories', 'list', '--group-id', groupId], {
+    check: (json) => {
+      assert.equal(json.data.categories.food, 'Food');
+      assert.equal(json.data.categories.transfer, 'Settlement');
+      return 'Category list shows the second set merged with the first.';
+    },
+  });
+
   await runCli(['groups', 'get', '--group-id', groupId], {
     check: (json) => {
-      assert.equal(json.data.group.name.startsWith('Codex Test'), true);
+      assert.equal(json.data.group.name.startsWith('CLI Test'), true);
       assert.equal(json.data.userGroup.member, memberA);
       return 'Group get returns metadata, permissions, and caller membership.';
     },
@@ -310,13 +375,24 @@ async function main() {
     },
   });
 
+  await runCli(['transactions', 'get', '--group-id', groupId, '--transaction-id', firstExpenseId], {
+    check: (json) => {
+      const transaction = json.data;
+      assert.equal(transaction.purpose, 'Launch dinner updated');
+      assert.equal(transaction.items[0].forWhom.length, 3);
+      assert.equal(transaction.currencyCode, 'USD');
+      assert.equal(transaction.whoPaid[0].memberId, memberA);
+      return 'Backend applied the patch and kept omitted transaction fields.';
+    },
+  });
+
   const extraTransactions = [
     tx({ purpose: 'Airport taxi', category: 'taxi', date: '2026-01-02', payer: memberB, split: [memberA, memberB, memberC], amount: '60' }),
     tx({ purpose: 'Beach coffee', category: 'coffee', date: '2026-01-03', payer: memberC, split: [memberB, memberC], amount: '24' }),
     tx({ purpose: 'Villa booking', category: 'stay', date: '2026-01-04', payer: memberA, split: [memberA, memberB, memberC], amount: '300' }),
     tx({ purpose: 'Scooter rental', category: 'taxi', date: '2026-01-05', payer: memberB, split: [memberA, memberB], amount: '45' }),
     tx({ purpose: 'Kayaking', category: 'activity', date: '2026-01-06', payer: memberC, split: [memberA, memberC], amount: '80' }),
-    tx({ purpose: 'Breakfast', category: 'food', date: '2026-01-07', payer: memberA, split: [memberA, memberB, memberC], amount: '54' }),
+    minimal(tx({ purpose: 'Breakfast', category: 'food', date: '2026-01-07', payer: memberA, split: [memberA, memberB, memberC], amount: '54' })),
     tx({ purpose: 'Museum tickets', category: 'activity', date: '2026-01-08', payer: memberB, split: [memberB, memberC], amount: '36' }),
     tx({ purpose: 'Late-night snacks', category: 'food', date: '2026-01-09', payer: memberC, split: [memberA, memberB, memberC], amount: '33' }),
     tx({ purpose: 'Train tickets', category: 'taxi', date: '2026-01-10', payer: memberA, split: [memberA, memberC], amount: '70' }),
@@ -329,7 +405,10 @@ async function main() {
       inputJson: expense,
       check: (json) => {
         assert.equal(json.data.transaction.type, 'expense');
-        return `Created ${expense.purpose} across ${expense.category}, date, and member mix.`;
+        assert.equal(json.data.transaction.fixedExchangeRate, false);
+        return Object.hasOwn(expense, 'fixedExchangeRate')
+          ? `Created ${expense.purpose} across ${expense.category}, date, and member mix.`
+          : `Created ${expense.purpose} from a minimal input; the CLI filled fixedExchangeRate.`;
       },
     });
     createdTransactions.push(created.data.transactionId);
@@ -355,6 +434,51 @@ async function main() {
       assert.equal(json.data.count, 10);
       assert.equal(json.data.transactions.some((item) => item.id === deleteId), false);
       return 'Transaction list confirms the deleted transaction is absent.';
+    },
+  });
+
+  await runCli(['transactions', 'get', '--group-id', groupId, '--transaction-id', deleteId], {
+    expectFailure: true, check: expectError('TRANSACTION_NOT_FOUND'),
+  });
+
+  await runCli(['expenses', 'create', '--group-id', groupId, '--input', '-'], {
+    inputJson: tx({ purpose: 'Ghost dinner', category: 'food', date: '2026-01-07', payer: 'missing-member', split: [memberA], amount: '10' }),
+    expectFailure: true, check: expectError('MEMBER_NOT_FOUND'),
+  });
+
+  await runCli(['expenses', 'create', '--group-id', groupId, '--input', '-'], {
+    inputJson: { ...tx({ purpose: 'Bad amount', category: 'food', date: '2026-01-07', payer: memberA, split: [memberA], amount: '10' }), items: [{ amount: 10, forWhom: [{ memberId: memberA, weight: '1' }] }] },
+    expectFailure: true, check: expectError('INVALID_INPUT'),
+  });
+
+  await runCli(['transactions', 'list', '--group-id', groupId], {
+    check: (json) => {
+      assert.equal(json.data.count, 10);
+      return 'Rejected creates (unknown member, numeric amount) wrote nothing.';
+    },
+  });
+
+  await runCli(['transactions', 'list', '--group-id', groupId, '--type', 'transfer'], {
+    check: (json) => {
+      assert.equal(json.data.count, 0);
+      return 'Type filter finds no transfers before settlement.';
+    },
+  });
+
+  await runCli(['transactions', 'list', '--group-id', groupId, '--paid-by-member-id', memberB], {
+    check: (json) => {
+      assert.ok(json.data.count > 0);
+      assert.ok(json.data.transactions.every((item) => item.whoPaid.some((ref) => ref.memberId === memberB)));
+      return 'Payer filter only returns transactions paid by that member.';
+    },
+  });
+
+  await runCli(['transactions', 'list', '--group-id', groupId, '--order', 'desc', '--limit', '3'], {
+    check: (json) => {
+      assert.equal(json.data.count, 3);
+      const times = json.data.transactions.map((item) => item.dateTime);
+      assert.deepEqual(times, [...times].sort((a, b) => b - a));
+      return 'Limit and descending order return the three latest transactions.';
     },
   });
 
@@ -474,10 +598,47 @@ async function main() {
     },
   });
 
+  await runCli(['groups', 'get', '--group-id', 'missing-group'], {
+    expectFailure: true,
+    check: (json) => {
+      assert.match(json.error.code, /^(GROUP_NOT_FOUND|GROUP_ACCESS_DENIED)$/);
+      assert.equal(typeof json.error.details.help, 'string');
+      return `Unknown group failed with ${json.error.code} and recovery help.`;
+    },
+  });
+
+  // Expire the stored session so the next command must refresh it.
+  const sessionDir = path.join(configDir, process.env.SETTLEUP_ENV || 'production');
+  const sessionFile = path.join(sessionDir, (await fs.readdir(sessionDir)).find((name) => name.startsWith('auth-')));
+  const expired = JSON.parse(await fs.readFile(sessionFile, 'utf8'));
+  await fs.writeFile(sessionFile, JSON.stringify({ ...expired, expiresAt: Date.now() - 1000 }));
+  await runCli(['users', 'me'], {
+    displayCommand: 'settleup users me  # after expiring the stored session',
+    check: (json) => {
+      assert.equal(json.data.uid, login.data.uid);
+      return 'Command succeeded with an expired stored session.';
+    },
+  });
+  const refreshed = JSON.parse(await fs.readFile(sessionFile, 'utf8'));
+  assert.ok(refreshed.expiresAt > Date.now() && refreshed.accessToken !== expired.accessToken);
+  steps.push({
+    command: 'inspect the stored session after `settleup users me`',
+    output: { ok: true, data: { refreshed: true, expiresAt: refreshed.expiresAt } },
+    check: 'The expired session was refreshed and saved with a new access token.',
+    passed: true,
+  });
+
   await runCli(['auth', 'logout'], {
     check: (json) => {
       assert.equal(json.data.authenticated, false);
       return 'Logout clears the local CLI session.';
+    },
+  });
+
+  await runCli(['auth', 'status'], {
+    check: (json) => {
+      assert.equal(json.data.authenticated, false);
+      return 'Auth status reports signed out after logout.';
     },
   });
 

@@ -105,7 +105,15 @@ Run:
 npm run integration:e2e
 ```
 
-This uses the configured API/environment (see environment selection below), creates a temporary account using a locally supplied Firebase key, logs in through the CLI, creates a group and members, exercises expenses, transaction patching, listing, deletion, filtering, debts, settlement transfers, changes, and logout.
+This uses the configured API/environment (see environment selection below), creates a temporary account using a locally supplied Firebase key, and drives every CLI command through a full user journey:
+
+- login, status, profile, token refresh after an expired session, logout, and signed-out status
+- group create (checking the push-ID format), list, and get
+- member add (including a name-only input that relies on create defaults), get, patch with read-back, and active-only listing
+- category set, a second set that must merge, and list
+- expenses (including a minimal input that relies on `fixedExchangeRate` defaulting), patch with read-back, get, delete, and every `transactions list` filter
+- debts, recalculation, settlement transfers, and the change log with limit/order
+- expected failures, which must return the right error code with `details.help` and write nothing: `MEMBER_NOT_FOUND`, `TRANSACTION_NOT_FOUND`, `INVALID_INPUT`, and an unknown group
 
 Each run writes a dated report to:
 

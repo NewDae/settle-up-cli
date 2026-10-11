@@ -22,8 +22,8 @@ async function fetchJson(url, options = {}) {
 }
 
 async function signUpWithPassword() {
-  const email = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-  const password = 'CodexTest123!';
+  const email = `cli-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
+  const password = 'CliTest123!';
   const url =
     `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${encodeURIComponent(firebaseApiKey)}`;
   const { response, json } = await fetchJson(url, {
@@ -153,17 +153,17 @@ function maybeLiveTest(name, fn) {
 function buildSandboxUserRecord(user) {
   return {
     email: user.email,
-    name: 'Codex Sandbox User',
+    name: 'CLI Sandbox User',
   };
 }
 
-async function createSandboxGroupWithMembers(memberNames = ['Codex Creator', 'Codex Friend']) {
-  const groupId = `codex-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+async function createSandboxGroupWithMembers(memberNames = ['CLI Creator', 'CLI Friend']) {
+  const groupId = `cli-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const permissionWrite = await putDbPath(`/permissions/${groupId}/${tempUser.localId}`, tempUser.idToken, {
     level: 30,
   });
   const groupPatch = {
-    name: `Codex Test ${Date.now()}`,
+    name: `CLI Test ${Date.now()}`,
     convertedToCurrency: 'USD',
     defaultPermission: 10,
     minimizeDebts: true,
@@ -280,7 +280,7 @@ maybeLiveTest('sandbox /userGroups/<uid> is reachable with auth and returns json
 });
 
 maybeLiveTest('sandbox permission records can be written and read for a synthetic group id', async () => {
-  const syntheticGroupId = `codex-${Date.now()}`;
+  const syntheticGroupId = `cli-test-${Date.now()}`;
   const permissionWrite = await putDbPath(`/permissions/${syntheticGroupId}/${tempUser.localId}`, tempUser.idToken, {
     level: 30,
   });
@@ -296,12 +296,12 @@ maybeLiveTest('sandbox permission records can be written and read for a syntheti
 });
 
 maybeLiveTest('sandbox group membership can be written after permissions exist', async () => {
-  const syntheticGroupId = `codex-${Date.now()}`;
+  const syntheticGroupId = `cli-test-${Date.now()}`;
   const permissionWrite = await putDbPath(`/permissions/${syntheticGroupId}/${tempUser.localId}`, tempUser.idToken, {
     level: 30,
   });
   const memberWrite = await postDbPath(`/members/${syntheticGroupId}`, tempUser.idToken, {
-    name: 'Codex',
+    name: 'CLI',
     active: true,
     defaultWeight: '1',
     photoUrl: null,
@@ -339,12 +339,12 @@ maybeLiveTest('sandbox group membership can be written after permissions exist',
 });
 
 maybeLiveTest('sandbox group create flow works with permission, group patch, member, and userGroup link', async () => {
-  const syntheticGroupId = `codex-${Date.now()}`;
+  const syntheticGroupId = `cli-test-${Date.now()}`;
   const permissionWrite = await putDbPath(`/permissions/${syntheticGroupId}/${tempUser.localId}`, tempUser.idToken, {
     level: 30,
   });
   const groupPatch = {
-    name: `Codex Test ${Date.now()}`,
+    name: `CLI Test ${Date.now()}`,
     convertedToCurrency: 'USD',
     defaultPermission: 10,
     minimizeDebts: true,
@@ -355,7 +355,7 @@ maybeLiveTest('sandbox group create flow works with permission, group patch, mem
   const groupPatchWrite = await patchDbPath(`/groups/${syntheticGroupId}`, tempUser.idToken, groupPatch);
   const groupRead = await readDbPath(`/groups/${syntheticGroupId}`, tempUser.idToken);
   const memberWrite = await postDbPath(`/members/${syntheticGroupId}`, tempUser.idToken, {
-    name: 'Codex Creator',
+    name: 'CLI Creator',
     active: true,
     defaultWeight: '1',
     photoUrl: null,
@@ -409,11 +409,11 @@ maybeLiveTest('sandbox group create flow works with permission, group patch, mem
 });
 
 maybeLiveTest('sandbox members can be listed, fetched, and patched', async () => {
-  const { groupId, memberIds } = await createSandboxGroupWithMembers(['Codex Original', 'Codex Other']);
+  const { groupId, memberIds } = await createSandboxGroupWithMembers(['CLI Original', 'CLI Other']);
   const membersList = await readDbPath(`/members/${groupId}`, tempUser.idToken);
   const memberRead = await readDbPath(`/members/${groupId}/${memberIds[0]}`, tempUser.idToken);
   const memberPatch = await patchDbPath(`/members/${groupId}/${memberIds[0]}`, tempUser.idToken, {
-    name: 'Codex Updated',
+    name: 'CLI Updated',
     defaultWeight: '1.5',
   });
   const memberReadAfterPatch = await readDbPath(`/members/${groupId}/${memberIds[0]}`, tempUser.idToken);
@@ -422,14 +422,14 @@ maybeLiveTest('sandbox members can be listed, fetched, and patched', async () =>
   assert.equal(typeof membersList.json[memberIds[0]], 'object');
   assert.equal(typeof membersList.json[memberIds[1]], 'object');
   assert.equal(memberRead.response.status, 200, JSON.stringify(memberRead.json));
-  assert.equal(memberRead.json.name, 'Codex Original');
+  assert.equal(memberRead.json.name, 'CLI Original');
   assert.equal(memberPatch.response.status, 200, JSON.stringify(memberPatch.json));
   assert.deepEqual(memberPatch.json, {
-    name: 'Codex Updated',
+    name: 'CLI Updated',
     defaultWeight: '1.5',
   });
   assert.equal(memberReadAfterPatch.response.status, 200, JSON.stringify(memberReadAfterPatch.json));
-  assert.equal(memberReadAfterPatch.json.name, 'Codex Updated');
+  assert.equal(memberReadAfterPatch.json.name, 'CLI Updated');
   assert.equal(memberReadAfterPatch.json.defaultWeight, '1.5');
   assert.equal(memberReadAfterPatch.json.active, true);
 });
@@ -451,7 +451,7 @@ maybeLiveTest('sandbox categories can be patched and read', async () => {
 });
 
 maybeLiveTest('sandbox expense and transfer transactions can be created, listed, patched, fetched, and deleted', async () => {
-  const { groupId, memberIds } = await createSandboxGroupWithMembers(['Codex Payer', 'Codex Receiver']);
+  const { groupId, memberIds } = await createSandboxGroupWithMembers(['CLI Payer', 'CLI Receiver']);
   const expense = {
     type: 'expense',
     purpose: 'Dinner',
@@ -533,7 +533,7 @@ maybeLiveTest('sandbox expense and transfer transactions can be created, listed,
 });
 
 maybeLiveTest('sandbox debts, changes, and debt recalculation task are reachable for a created group', async () => {
-  const { groupId, memberIds } = await createSandboxGroupWithMembers(['Codex Payer', 'Codex Receiver']);
+  const { groupId, memberIds } = await createSandboxGroupWithMembers(['CLI Payer', 'CLI Receiver']);
   const expenseWrite = await postDbPath(`/transactions/${groupId}`, tempUser.idToken, {
     type: 'expense',
     purpose: 'Debt Seed',
@@ -579,7 +579,7 @@ maybeLiveTest('sandbox debts, changes, and debt recalculation task are reachable
 
 maybeLiveTest('POST /groups still requires pre-existing create permissions', async () => {
   const { response, json } = await postDbPath('/groups', tempUser.idToken, {
-    name: `Codex Test ${Date.now()}`,
+    name: `CLI Test ${Date.now()}`,
     convertedToCurrency: 'USD',
     defaultPermission: 10,
     minimizeDebts: true,

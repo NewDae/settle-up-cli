@@ -88,7 +88,7 @@ The executable is `settleup`. Write JSON is supplied with `--input <path>` or `-
 | `users me` | None | Fetch the authenticated user's profile. |
 | `groups list` | None | List groups accessible to the current user. |
 | `groups get` | `--group-id` | Fetch group metadata, permissions, and the caller's group link. |
-| `groups create` | `--input` → `CreateGroupInput` | Create a client-generated group ID, permission record, group metadata, first member, user-group link, and current-tab setting. |
+| `groups create` | `--input` → `CreateGroupInput` | Create a client-generated group ID (Firebase push-ID format, like app-created groups), permission record, group metadata, first member, user-group link, and current-tab setting. |
 | `members list` | `--group-id` | List members; optional `--active-only`. |
 | `members get` | `--group-id`, `--member-id` | Fetch one member. |
 | `members add` | `--group-id`, `--input` → `MemberInput` | Create a member. |
