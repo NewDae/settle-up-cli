@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { createSessionStore } from './lib/session-store.mjs';
+import { createBrowserLogin } from './lib/browser-login.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
@@ -22,6 +23,12 @@ const CONFIG_DIR = process.env.SETTLEUP_CLI_CONFIG_DIR
 const sessionStore = createSessionStore({
   configDir: CONFIG_DIR, environment: ENVIRONMENT, apiBaseUrl: API_BASE_URL,
   authBaseUrl: AUTH_BASE_URL, storage: process.env.SETTLEUP_AUTH_STORAGE || 'keyring',
+});
+const browserLogin = createBrowserLogin({
+  configDir: CONFIG_DIR, environment: ENVIRONMENT, apiBaseUrl: API_BASE_URL, authBaseUrl: AUTH_BASE_URL,
+  loginBaseUrl: process.env.SETTLEUP_LOGIN_BASE_URL ||
+    (ENVIRONMENT === 'production' && !process.env.SETTLEUP_API_BASE_URL && !process.env.SETTLEUP_AUTH_BASE_URL && !FIREBASE_API_KEY
+      ? 'https://settleupcli.pages.dev' : ''),
 });
 const META = { environment: ENVIRONMENT };
 const ERROR_CODES = new Set([
@@ -653,11 +660,11 @@ const HELP = {
   commands: {
     auth: {
       login: {
-        synopsis: 'settleup auth login',
+        synopsis: 'settleup auth login [--browser | --complete [--wait]]',
         purpose: 'Authenticate user and store the session in the OS credential store (or explicit file storage).',
         operation: 'authenticates',
         requiredFlags: [],
-        optionalFlags: [],
+        optionalFlags: ['--browser (create a private browser login link)', '--complete (retrieve the encrypted session)', '--wait (with --complete, poll until signed in or expired)'],
         identifiers: ['uid in output'],
         example: 'settleup auth login',
       },
@@ -1130,6 +1137,27 @@ async function main() {
   }
 
   if (group === 'auth' && command === 'login') {
+    if ((flags.browser && flags.complete) || (flags.wait && !flags.complete)) {
+      throw Object.assign(new Error('Use --browser to start, or --complete [--wait] to finish browser login'), { cliCode: 'INVALID_INPUT' });
+    }
+    if (flags.browser || flags.complete) {
+      await sessionStore.check();
+      if (flags.browser) return printJson(ok(await browserLogin.start()));
+      const result = await browserLogin.complete({ wait: Boolean(flags.wait) });
+      if (result.status === 'pending') return printJson(ok(result));
+      const auth = result.session;
+      if (typeof auth?.accessToken !== 'string' || !auth.accessToken
+          || typeof auth.refreshToken !== 'string' || !auth.refreshToken
+          || typeof auth.uid !== 'string' || !auth.uid
+          || typeof auth.email !== 'string' || !auth.email
+          || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= Date.now()) {
+        browserLogin.finish();
+        throw Object.assign(new Error('Browser login did not return a complete session; start again'), { cliCode: 'AUTH_INVALID' });
+      }
+      try { await sessionStore.write(auth); } finally { browserLogin.finish(); }
+      await ensureUserRecord(auth);
+      return printJson(ok({ uid: auth.uid, email: auth.email, expiresAt: auth.expiresAt }));
+    }
     let email;
     let password;
     if (input.isTTY) {
@@ -1193,6 +1221,7 @@ async function main() {
   }
 
   if (group === 'auth' && command === 'logout') {
+    await browserLogin.cancel();
     await sessionStore.delete();
     return printJson(ok({ authenticated: false }));
   }
@@ -1432,9 +1461,9 @@ function recoveryDetails(error) {
   }
 
   const help = {
-    AUTH_REQUIRED: 'Run `settleup auth login` privately in your terminal, then retry.',
+    AUTH_REQUIRED: 'Run `settleup auth login --browser`, sign in privately in the browser, then run `settleup auth login --complete`. Private terminal login is also available.',
     AUTH_INVALID: 'Check email/password sign-in. For Google or Apple accounts, follow https://settleup.app/migrate-account, then run `settleup auth login` privately.',
-    AUTH_REFRESH_FAILED: 'Run `settleup auth login` privately to renew the session, then retry.',
+    AUTH_REFRESH_FAILED: 'Run `settleup auth login --browser` and `settleup auth login --complete` to renew the session, or sign in privately in your terminal.',
     GROUP_NOT_FOUND: 'Run `settleup groups list` and use an exact returned group ID.',
     GROUP_ACCESS_DENIED: 'Confirm the group ID and the signed-in account\'s access using `settleup groups list`.',
     MEMBER_NOT_FOUND: 'Run `settleup members list --group-id <groupId>` and use returned member IDs, not account uids.',

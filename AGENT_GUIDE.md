@@ -4,7 +4,7 @@ Connect the user's Settle Up account, then help with shared expenses, groups, an
 
 ## Install
 
-You need terminal access, Node.js 22+, internet access, and a private terminal where the user can sign in. Check your tools before starting; a cloud agent and the user's computer may have separate sessions.
+You need terminal access, Node.js 22+, and internet access. Check your tools before starting. Browser login lets the user sign in on their own computer while the CLI runs in your environment.
 
 ```sh
 npm install -g settle-up-cli
@@ -17,13 +17,23 @@ The command is `settleup`. No API key or backend setup is needed.
 
 Email/password only. Users of Google, Apple, or another sign-in method should first migrate at https://settleup.app/migrate-account.
 
-Ask the user to sign in privately on the same computer where you run the CLI:
+Start a browser login in the environment where you run the CLI:
 
 ```sh
-settleup auth login
+settleup auth login --browser
 ```
 
-Never request passwords or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If your environment cannot offer private sign-in, explain what the user needs to do. The CLI refreshes the session automatically.
+Show the user the returned `loginUrl` and `verificationCode`. Ask them to open the link privately, compare the code, and enter their credentials on the hosted page. Then finish on the same CLI configuration:
+
+```sh
+settleup auth login --complete
+```
+
+If the result says `status: pending`, the user has not finished; do not claim they are connected. Retry after they finish, or use `--complete --wait` to poll until sign-in or the 10-minute expiry. The browser can be on a different computer. `auth logout` cancels a pending link.
+
+The hosted page sends credentials to this independent integration's hosted auth Worker, which verifies them with Firebase. The Firebase API key stays in that Worker. The page never returns readable session tokens; the CLI collects an encrypted session once and saves it in its selected credential store. Be transparent about this hosted-service trust requirement; do not describe it as official Settle Up login.
+
+Never request passwords or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Private terminal login with `settleup auth login` remains available. The CLI refreshes its session through the hosted Worker automatically.
 
 `auth status` reports local session presence; a successful read confirms live access. Verify the connection:
 
@@ -78,7 +88,7 @@ For additional tasks, use `settleup --help` or `<command> --help`. This CLI is a
 Read stdout as JSON: success is `{ "ok": true, "data": ..., "meta": ... }`; failure is `{ "ok": false, "error": { "code": ..., "message": ..., "details": ... }, "meta": ... }` with a nonzero exit code. Interactive login prompts go to stderr. Every error includes `error.details.help` with the next step to take; follow it before retrying.
 
 - INVALID_INPUT: fix the payload or flags using the `settleup schema` or `--help` command named in `details.help`. Nothing was written.
-- AUTH_REQUIRED / AUTH_REFRESH_FAILED: ask the user to sign in privately again.
+- AUTH_REQUIRED / AUTH_REFRESH_FAILED: start a fresh browser login and complete it after the user signs in privately.
 - AUTH_STORAGE_FAILED: ask the user to unlock or enable the OS credential store. Plaintext storage requires their explicit choice; never silently switch it.
 - AUTH_INVALID: check email/password sign-in and account migration.
 - GROUP_ACCESS_DENIED: confirm the group and the user's access.

@@ -1,12 +1,32 @@
 # Login And Auth Configuration
 
-This page explains how the published `settleup` CLI signs in without shipping Firebase credentials.
+This page explains terminal and browser login without shipping the integration’s Firebase API key.
 
 ## Sign in
 
-Run `settleup auth login` in your terminal and enter your Settle Up email/password. The password is hidden while you type. The CLI does not support browser-based Google, Apple, or other provider login. If you use one of those methods, first [migrate your account to email/password](https://settleup.app/migrate-account).
+Run `settleup auth login` in your terminal and enter your Settle Up email/password. The password is hidden while you type. Browser login also uses email/password; it does not add Google, Apple, or other provider sign-in. If you use one of those methods, first [migrate your account to email/password](https://settleup.app/migrate-account).
 
 The password is sent over HTTPS to the hosted auth service and is not saved by the CLI. Email, user ID, expiry, and session tokens use the OS credential store by default. Refresh uses the refresh token, never a saved password. `settleup auth logout` removes credentials for the selected configuration; it does not revoke copies held elsewhere.
+
+## Browser login for agents
+
+```sh
+settleup auth login --browser
+# Open the returned loginUrl privately and compare verificationCode.
+# Enter email/password on the page, then finish in the same CLI environment:
+settleup auth login --complete
+settleup groups list
+```
+
+`--browser` returns a JSON object with `status: pending`, `loginUrl`, `verificationCode`, `expiresAt`, and `next`. A link lasts 10 minutes. The user's browser and the CLI can be on different computers. `--complete` returns `status: pending` until the page finishes; it saves the session when ready. `--complete --wait` polls every three seconds until ready or expired. `auth logout` clears the local pending login and requests remote cancellation.
+
+The hosted login page is part of this independent community integration, not an official Settle Up sign-in page. Its same-origin Pages Function forwards the email/password to the existing auth Worker through an internal Cloudflare service binding. The Worker holds the Firebase API key and performs Firebase password verification. The key is never returned to the browser or bundled with the CLI. Refresh continues through the existing Worker.
+
+The hosted services necessarily handle the password and readable session in memory during sign-in. The flow does not persist passwords, log credentials, or put them in URLs. The website backend encrypts only the required session fields for the CLI's temporary public key before storing a handoff. The browser receives only a completion status. A separate hashed poll credential allows the CLI to collect the encrypted session once; a browser link cannot collect it. Successful collection removes the encrypted handoff. Expired rows are inaccessible and are cleaned up on subsequent login requests. This does not make the CLI an official client or remove the need to trust the hosted service.
+
+The CLI keeps its temporary private key and poll credential in a mode-0600 file under its mode-0700 environment directory on Unix. It removes that file on completion, logout, or the next start/completion after expiry. On Windows, protection relies on the containing directory's ACLs. Long-lived sessions use the configured OS credential store or explicit file storage. Neither passwords nor tokens are printed to stdout.
+
+Custom environments or database/auth overrides must explicitly set `SETTLEUP_LOGIN_BASE_URL` to the matching website's HTTPS origin. HTTP loopback is allowed for local development. Unconfigured browser login fails instead of silently using production. See [deployment instructions](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md#browser-login-website).
 
 ## Published Package Flow
 
@@ -48,6 +68,7 @@ In this flow, the published CLI does not need `SETTLEUP_FIREBASE_API_KEY`. The a
 | `SETTLEUP_API_BASE_URL` | Optional database/API URL override. Production has a packaged default; non-production needs explicit configuration. |
 | `SETTLEUP_AUTH_BASE_URL` | Optional hosted-auth URL override. |
 | `SETTLEUP_FIREBASE_API_KEY` | Direct Firebase Auth key for local/staging/internal use; takes precedence over hosted auth when present. |
+| `SETTLEUP_LOGIN_BASE_URL` | Browser-login website origin; production defaults to `https://settleupcli.pages.dev`. Required for custom/staging environments. |
 | `SETTLEUP_CLI_CONFIG_DIR` | Optional session directory override; default `~/.config/settleup-cli`. The environment subdirectory remains separate. |
 | `SETTLEUP_AUTH_STORAGE` | `keyring` by default; `file` explicitly opts into plaintext session storage. |
 

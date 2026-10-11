@@ -1,0 +1,13 @@
+{
+  "name": "settleupcli",
+  "pages_build_output_dir": "./docs",
+  "compatibility_date": "2026-05-28",
+  "services": [{ "binding": "AUTH_SERVICE", "service": "settleup-production" }],
+  "d1_databases": [{
+    "binding": "LOGIN_DB",
+    "database_name": "settleup-browser-login",
+    // Replace after creating the production D1 database. Local dev uses this ID.
+    "database_id": "00000000-0000-0000-0000-000000000000",
+    "migrations_dir": "migrations"
+  }]
+}

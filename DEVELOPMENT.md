@@ -60,6 +60,22 @@ npm run docs:check
 
 `docs/agent.md` and `docs/llms.txt` are generated copies for the website. The npm package includes the canonical guide. Do not maintain three separate versions.
 
+## Browser login website
+
+The existing Cloudflare Pages project serves `docs/`. Pages Functions under `functions/api/login/` provide browser pairing, using the `LOGIN_DB` D1 binding and the `AUTH_SERVICE` service binding to the existing `settleup-production` auth Worker. No Firebase API key belongs in Pages configuration or browser assets. The existing auth Worker needs no code change.
+
+Before the first production deployment:
+
+1. Create a D1 database with `npx wrangler d1 create settleup-browser-login` and put its returned ID in `wrangler.jsonc`.
+2. Apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --remote`.
+3. Confirm the `AUTH_SERVICE` binding targets the production Worker in the same Cloudflare account. Preview/staging deployments must use a staging auth Worker and separate D1 database; do not point a public preview at production credentials.
+4. Run `npm run docs:sync`, `npm test`, and `npm run docs:check`.
+5. Deploy from the repository root with `npx wrangler pages deploy docs --project-name settleupcli`. Deploying only static files without Functions will not enable login. Publish a CLI release with the browser flags after checking the live site.
+
+Local development: apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --local`, run the auth Worker locally with `--env staging` in its own repository, then run `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`. Use `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` with matching local/staging API/auth configuration. The public website uses no third-party scripts on the login page; CSP allows only same-origin requests. Keep request-body logging disabled in both hosted services and any proxy.
+
+`npm run docs:sync` also copies shared login cryptography to `docs/login-crypto.js` and updates the embedded machine guide. Login endpoint tests use real SQLite SQL, a local HTTP server, the real CLI executable, and a stub of the existing auth Worker. They do not verify production bindings or actual Firebase credentials.
+
 ## Repository map
 
 | Path | Responsibility |

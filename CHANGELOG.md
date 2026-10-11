@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Add `auth login --browser` and `auth login --complete [--wait]` so users can sign in privately on a hosted page while an agent runs the CLI on another computer.
+- Reuse the existing hosted auth Worker for password verification and session refresh; the integration's Firebase API key stays in that Worker.
+- Add a same-origin login page, Pages Functions, and a D1 migration for an encrypted, 10-minute, one-time session handoff. Neither passwords nor readable sessions are stored in the handoff database or returned to the browser.
+- Cancel pending browser login on logout and update agent setup guidance. Private terminal login remains available.
+
 ## 0.2.0
 
 ### Changed
