@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { createFirebaseHandoff } from '../bin/lib/firebase-browser-login.mjs';
 import { createLoginKey, decryptLogin } from '../bin/lib/browser-crypto.mjs';
 
-const apiKey = 'test-firebase-api-key-12345';
+const apiKey = `AIza${'T'.repeat(35)}`;
 const email = 'person@example.invalid';
 const password = 'private-test-password';
 const browserId = 'a'.repeat(64);
@@ -42,12 +42,23 @@ test('Firebase failures and malformed success responses do not expose provider d
       return true;
     });
   }
-  await assert.rejects(createFirebaseHandoff(input, async () => { throw new Error(secret); }), /Could not reach Firebase/);
-  await assert.rejects(createFirebaseHandoff(input, async () => new Response(secret)), /invalid sign-in response/);
+  await assert.rejects(createFirebaseHandoff(input, async () => { throw new Error(secret); }), /Couldn’t reach the sign-in service/);
+  await assert.rejects(createFirebaseHandoff(input, async () => new Response(secret)), /unexpected response/);
   for (const value of [null, {}, { ...providerSession(), refreshToken: '' }, { ...providerSession(), expiresIn: '-1' }, { ...providerSession(), expiresIn: 'Infinity' }]) {
     await assert.rejects(createFirebaseHandoff(input, async () => Response.json(value)), /incomplete session/);
   }
-  await assert.rejects(createFirebaseHandoff({ ...input, apiKey: '' }, async () => { throw new Error('Must not send'); }), /Enter your Settle Up/);
+  for (const bad of ['', 'test-firebase-api-key-12345', `${apiKey}x`]) {
+    await assert.rejects(createFirebaseHandoff({ ...input, apiKey: bad }, async () => { throw new Error('Must not send'); }), /starts with “AIza”/);
+  }
+  await assert.rejects(createFirebaseHandoff({ ...input, password: '' }, async () => { throw new Error('Must not send'); }), /email and password/);
+});
+
+test('a key Firebase rejects is reported separately from account sign-in failures', async () => {
+  const keys = await createLoginKey();
+  const input = { apiKey, email, password, publicKey: keys.publicKey, browserId };
+  const reply = message => async () => Response.json({ error: { message } }, { status: 400 });
+  await assert.rejects(createFirebaseHandoff(input, reply('API key not valid. Please pass a valid API key.')), /API key wasn’t accepted/);
+  await assert.rejects(createFirebaseHandoff(input, reply('INVALID_LOGIN_CREDENTIALS')), /Check your email and password/);
 });
 
 test('actual login-page controller sends credentials to Firebase and only ciphertext to its backend', async () => {

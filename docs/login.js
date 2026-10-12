@@ -1,4 +1,4 @@
-import { createFirebaseHandoff } from './firebase-browser-login.js';
+import { createFirebaseHandoff } from './login-firebase.js';
 
 const byId = id => document.getElementById(id);
 const [browserId, encodedKey] = location.hash.slice(1).split('.');
@@ -27,6 +27,11 @@ async function request(action, data) {
   return result.data;
 }
 async function initialize() {
+  if (/^[a-f0-9]{64}$/.test(browserId) && !encodedKey) {
+    // Links from CLI 0.3 and earlier carry no public key.
+    status('This link is from an older version of the CLI. Update it with npm install -g settle-up-cli, then ask for a new link.', true);
+    return;
+  }
   if (!/^[a-f0-9]{64}$/.test(browserId) || !/^B[A-Za-z0-9+/]{86}=$/.test(cliPublicKey || '')) {
     status('Open the private login link from your agent to connect.');
     byId('start-help').hidden = false;

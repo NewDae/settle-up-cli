@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { authHarness, session } from './helpers/auth-session-harness.mjs';
+import { authHarness, session, DUMMY_FIREBASE_KEY } from './helpers/auth-session-harness.mjs';
 import { createSessionStore } from '../bin/lib/session-store.mjs';
 
 function setup(t) { const h = authHarness(); t.after(() => h.cleanup()); return h; }
@@ -23,8 +23,9 @@ test('default OS session survives processes, refreshes without password, and log
   const refreshed = JSON.parse(Object.values(h.entries())[0]);
   assert.equal(refreshed.accessToken, 'dummy-new-access'); assert.equal(refreshed.refreshToken, 'dummy-new-refresh');
   const requests = h.requests();
-  assert.deepEqual(requests.find(r => r.path.endsWith('/refresh')).body, { refreshToken: 'dummy-refresh' });
-  assert.equal(requests.filter(r => r.path.endsWith('/login')).length, 1);
+  assert.deepEqual(requests.find(r => r.path === '/v1/token').body, { grant_type: 'refresh_token', refresh_token: 'dummy-refresh' });
+  assert.equal(requests.filter(r => r.path === '/v1/accounts:signInWithPassword').length, 1);
+  assert.equal(saved.firebaseApiKey, DUMMY_FIREBASE_KEY);
   const status = h.run(['auth', 'status']); successful(status);
   assert.equal(status.output.data.authenticated, true); assert.equal(status.output.data.storage, 'keyring');
   assert.doesNotMatch(status.stdout, /dummy-new-access|dummy-new-refresh|dummy-password/);
