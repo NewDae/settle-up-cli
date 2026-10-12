@@ -66,7 +66,7 @@ test('actual login-page controller sends credentials to Firebase and only cipher
     if (url === '/api/login/complete') return Response.json({ ok: true, data: { status: 'ready' } });
     throw new Error('Unexpected destination');
   };
-  const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\n/m, '');
+  const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/m, '');
   vm.runInNewContext(source, {
     document: { getElementById: element }, location: { hash: `#${browserId}.${encodeURIComponent(keys.publicKey)}`, pathname: '/login' },
     history: { replaceState() {} }, window: { setTimeout() {}, addEventListener() {} }, AbortSignal, Date, fetch: fetchImpl,
@@ -91,7 +91,7 @@ test('login page rejects a relay that substitutes the CLI public key before coll
   const substituted = await createLoginKey();
   const elements = {};
   const getElementById = id => elements[id] ||= { hidden: true, dataset: {}, textContent: '', addEventListener() {} };
-  const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\n/m, '');
+  const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/m, '');
   vm.runInNewContext(source, {
     document: { getElementById }, location: { hash: `#${browserId}.${encodeURIComponent(keys.publicKey)}`, pathname: '/login' },
     history: { replaceState() {} }, window: { setTimeout() {}, addEventListener() {} }, AbortSignal, Date,
