@@ -41,6 +41,35 @@ How to explain auth if the user asks: the hosted page sends credentials to this 
 
 Never request passwords or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Private terminal login with `settleup auth login` remains available. The CLI refreshes its session through the hosted Worker automatically.
 
+### Browser login reference
+
+Outputs (stdout, `data` field of the JSON envelope):
+
+```jsonc
+// settleup auth login --browser
+{ "status": "pending", "loginUrl": "https://settleupcli.pages.dev/login#<64 hex>", "expiresAt": 1777872000000, "next": "..." }
+// settleup auth login --complete   (user not done yet; exit code 0)
+{ "status": "pending", "expiresAt": 1777872000000, "next": "..." }
+// settleup auth login --complete   (signed in; session saved)
+{ "uid": "<uid>", "email": "person@example.com", "expiresAt": 1777875600000 }
+```
+
+- Run `--browser` and `--complete` with the same environment variables and config directory. The pending key is saved locally under the CLI config directory, so the filesystem must persist between the two commands.
+- One pending login per CLI configuration. Starting another returns `INVALID_INPUT`; run `--complete`, or `auth logout` to cancel and start over.
+- `--complete --wait` blocks, polling every 3 seconds, for up to 10 minutes. If your tool calls time out sooner, ask the user to tell you when they have signed in, then run `--complete` without `--wait`. Repeating `--complete` is safe.
+- Polling is not a substitute for the user: a `pending` result means they have not finished. Do not loop on it without telling them.
+
+| Error during browser login | Meaning | Next step |
+|---|---|---|
+| `INVALID_INPUT` "already pending" | An earlier link is still open | `--complete`, or `auth logout` then `--browser` |
+| `AUTH_REQUIRED` "No pending browser login" | `--complete` ran without a start, or in another config | Run `--browser` in this environment |
+| `AUTH_INVALID` "expired or already completed" | The 10-minute link lapsed, or the session was already collected | Run `--browser` for a new link |
+| `API_RATE_LIMITED` | Too many links from this IP | Wait a minute, then retry |
+| `API_REQUEST_FAILED` | Login service unreachable | Retry; if it persists, offer terminal login |
+| `INVALID_INPUT` "SETTLEUP_LOGIN_BASE_URL" | Custom or staging environment without a login site | Set `SETTLEUP_LOGIN_BASE_URL`, or use terminal login |
+
+Wrong-password attempts happen on the web page, not in the CLI; the page shows the error to the user.
+
 `auth status` reports local session presence; a successful read confirms live access. Verify the connection:
 
 ```sh
