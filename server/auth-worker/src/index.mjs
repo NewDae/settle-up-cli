@@ -109,13 +109,14 @@ async function fetchJson(url, options) {
     });
   }
   if (!response.ok) {
-    const upstreamCode = body?.error?.message || body?.error || '';
+    // Never echo Firebase error codes: EMAIL_NOT_FOUND vs INVALID_PASSWORD
+    // would let anyone check which emails have Settle Up accounts.
     const authInvalid = response.status === 400 || response.status === 401 || response.status === 403;
     throw Object.assign(new Error(`Auth provider request failed: ${response.status}`), {
       status: authInvalid ? 401 : 502,
       code: authInvalid ? 'AUTH_INVALID' : 'API_REQUEST_FAILED',
       publicMessage: authInvalid ? 'Invalid email or password' : 'Auth provider request failed',
-      details: upstreamCode ? { upstreamCode } : {},
+      details: {},
     });
   }
   return body;

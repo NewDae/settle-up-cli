@@ -9,5 +9,19 @@
     // Replace after creating the production D1 database. Local dev uses this ID.
     "database_id": "00000000-0000-0000-0000-000000000000",
     "migrations_dir": "migrations"
-  }]
+  }],
+  // Preview deployments run unreviewed branches on public URLs. They must never
+  // receive production passwords or write to the production handoff database.
+  "env": {
+    "preview": {
+      "services": [{ "binding": "AUTH_SERVICE", "service": "settleup-staging" }],
+      "d1_databases": [{
+        "binding": "LOGIN_DB",
+        "database_name": "settleup-browser-login-staging",
+        // Replace after creating the staging D1 database.
+        "database_id": "00000000-0000-0000-0000-000000000001",
+        "migrations_dir": "migrations"
+      }]
+    }
+  }
 }

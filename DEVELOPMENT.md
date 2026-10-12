@@ -62,13 +62,13 @@ npm run docs:check
 
 ## Browser login website
 
-The existing Cloudflare Pages project serves `docs/`. Pages Functions under `functions/api/login/` provide browser pairing, using the `LOGIN_DB` D1 binding and the `AUTH_SERVICE` service binding to the existing `settleup-production` auth Worker. No Firebase API key belongs in Pages configuration or browser assets. The existing auth Worker needs no code change.
+The existing Cloudflare Pages project serves `docs/`. Pages Functions under `functions/api/login/` provide browser pairing, using the `LOGIN_DB` D1 binding and the `AUTH_SERVICE` service binding to the existing `settleup-production` auth Worker. No Firebase API key belongs in Pages configuration or browser assets. The auth Worker needs no change for browser login.
 
 Before the first production deployment:
 
 1. Create a D1 database with `npx wrangler d1 create settleup-browser-login` and put its returned ID in `wrangler.jsonc`.
 2. Apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --remote`.
-3. Confirm the `AUTH_SERVICE` binding targets the production Worker in the same Cloudflare account. Preview/staging deployments must use a staging auth Worker and separate D1 database; do not point a public preview at production credentials.
+3. Confirm the `AUTH_SERVICE` binding targets the production Worker in the same Cloudflare account. `env.preview` in `wrangler.jsonc` binds preview deployments to `settleup-staging` and a separate D1 database. Create it with `npx wrangler d1 create settleup-browser-login-staging`, put its ID in `env.preview`, and apply the migration with `--env preview`. Never point a public preview at production credentials.
 4. Run `npm run docs:sync`, `npm test`, and `npm run docs:check`.
 5. Deploy from the repository root with `npx wrangler pages deploy docs --project-name settleupcli`. Deploying only static files without Functions will not enable login. Publish a CLI release with the browser flags after checking the live site.
 
@@ -78,7 +78,7 @@ Local development: apply the migration with `npx wrangler d1 migrations apply LO
 
 ## Auth Worker source
 
-The complete hosted auth implementation lives in [server/auth-worker/](server/auth-worker/README.md), alongside the CLI and website. Its source and deployment configuration were imported unchanged. `npm test` includes its login, refresh, validation, rate-limit, and credential-logging checks.
+The complete hosted auth implementation lives in [server/auth-worker/](server/auth-worker/README.md), alongside the CLI and website. Its deployment configuration was imported unchanged; the only source change since import removes upstream Firebase error codes from responses. `npm test` includes its login, refresh, validation, rate-limit, and credential-logging checks.
 
 Use `npm run auth:dev` for local staging development, or the explicit `auth:deploy:staging` / `auth:deploy:production` scripts for authorized deployments. These target the existing Workers and preserve their secret bindings; no live secrets were moved into this repository. Keep Worker local development secrets in ignored files under `server/auth-worker/`, separate from root CLI environment files. See the Worker README for configuration and the limits of public-source verification.
 

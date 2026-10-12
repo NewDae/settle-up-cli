@@ -26,6 +26,21 @@ The hosted services necessarily handle the password and readable session in memo
 
 The CLI keeps its temporary private key and poll credential in a mode-0600 file under its mode-0700 environment directory on Unix. It removes that file on completion, logout, or the next start/completion after expiry. On Windows, protection relies on the containing directory's ACLs. Long-lived sessions use the configured OS credential store or explicit file storage. Neither passwords nor tokens are printed to stdout.
 
+### Browser login security model
+
+| Concern | Protection |
+|---|---|
+| Password exposure to the agent or chat | The password is typed only on the hosted page. The CLI output contains the link, expiry, and finally the connected `uid`/`email`, never a password or token. |
+| Link leaked (chat logs, screenshots) | The link ID is in the URL fragment, so browsers do not send it to servers or referrers. The page also removes it from the address bar. It cannot collect the session. Collection needs the CLI's separate 256-bit poll token, stored only as a SHA-256 hash server-side. The session is encrypted to the CLI's private key. |
+| Handoff interception or tampering | The session is encrypted with ephemeral P-256 ECDH, then HKDF-SHA-256 and AES-256-GCM. The link ID is bound into both key derivation and the authenticated data. Collection is a single atomic `DELETE … RETURNING`. |
+| Link phishing (an attacker sends you their link) | Inherent to any device-style login: whoever created the link receives the session. The page warns before sign-in and shows the expiry, links last 10 minutes, and the CLI reports the connected email so the user can confirm it. Agents must create links only when the user asks. |
+| Session swap (someone with your link signs in their own account) | The CLI reports the connected email; agents are instructed to confirm it with the user. |
+| Cross-site requests | `context` and `complete` require a same-origin `Origin`. The page is served with a strict same-origin CSP, `frame-ancestors 'none'`, and `no-referrer`. |
+| Password guessing and account enumeration | The auth Worker applies a per-IP limit of 10 requests per minute, shared by login and refresh. Link creation has a separate limit of 10 per minute, keyed by a hashed IP. Errors never include upstream Firebase codes, so a response does not reveal whether an email has an account. |
+| Unreviewed code handling production passwords | Pages preview deployments bind the staging auth Worker and a separate D1 database (`env.preview` in `wrangler.jsonc`). |
+
+What this cannot protect against: a compromised hosted deployment or Cloudflare account, malware on the device used to sign in, or a user who signs in through a link they did not request. Changing the Settle Up password revokes Firebase refresh tokens; already issued access tokens expire within an hour.
+
 Custom environments or database/auth overrides must explicitly set `SETTLEUP_LOGIN_BASE_URL` to the matching website's HTTPS origin. HTTP loopback is allowed for local development. Unconfigured browser login fails instead of silently using production. See [deployment instructions](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md#browser-login-website).
 
 ## Published Package Flow

@@ -3,7 +3,7 @@ const audienceLinks = [...document.querySelectorAll('[data-audience]')];
 const guideUrl = 'https://settleupcli.pages.dev/agent.md';
 function agentPrompt(agent) {
   const greeting = agent ? `Hi ${agent}, ` : '';
-  return `${greeting}help me connect my Settle Up account so you can help with shared expenses and balances. Read ${guideUrl} and follow the setup guide. Check whether you have the tools to run the CLI, then run settleup auth login --browser and give me the private login link. After I sign in on that page, run settleup auth login --complete. This CLI uses email/password; if I need to migrate, direct me to https://settleup.app/migrate-account. Never ask for my password or tokens in chat. Once connected, show me my groups. Make no changes to expenses or groups until I ask.`;
+  return `${greeting}help me connect my Settle Up account so you can help with shared expenses and balances. Read ${guideUrl} and follow the setup guide. Check whether you have the tools to run the CLI, then run settleup auth login --browser and give me the private login link. After I sign in on that page, run settleup auth login --complete. This CLI uses email/password; if I need to migrate, direct me to https://settleup.app/migrate-account. Never ask for my password or tokens in chat. Once connected, tell me which email is connected and show me my groups. Make no changes to expenses or groups until I ask.`;
 }
 document.getElementById('prompt-preview-text').textContent = agentPrompt();
 function showAudience(audience, updateUrl = true) {

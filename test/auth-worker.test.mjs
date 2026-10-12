@@ -170,6 +170,7 @@ test('maps upstream auth failures to stable envelopes', async () => {
     assert.equal(json.error.code, 'AUTH_INVALID');
     assert.equal(json.error.message, 'Invalid email or password');
     assert.equal(JSON.stringify(json).includes('bad-secret'), false);
+    assert.deepEqual(json.error.details, {}, 'upstream codes would allow account enumeration');
   } finally {
     globalThis.fetch = originalFetch;
   }

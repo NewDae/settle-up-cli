@@ -28,6 +28,7 @@ async function initialize() {
     context = await request('context', { browserId });
     byId('login-form').hidden = false;
     status('');
+    byId('expiry').textContent = `This link expires at ${new Date(context.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
     const remaining = Math.max(0, context.expiresAt - Date.now());
     window.setTimeout(() => {
       if (!connected) { byId('login-form').hidden = true; status('This login link has expired. Ask your agent for a new link.', true); }
