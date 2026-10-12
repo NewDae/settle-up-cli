@@ -1,7 +1,15 @@
+import { createFirebaseHandoff } from './login-firebase.js';
+
 const byId = id => document.getElementById(id);
-const browserId = location.hash.slice(1);
+const [browserId, encodedKey] = location.hash.slice(1).split('.');
+let cliPublicKey;
+try { cliPublicKey = decodeURIComponent(encodedKey || ''); } catch {}
 // The fragment is never sent to the server, analytics, or referrers.
 history.replaceState(null, '', location.pathname);
+// Opening a fresh CLI link in the same tab must initialize its new pairing.
+window.addEventListener('hashchange', () => {
+  if (/^#[a-f0-9]{64}\./.test(location.hash)) location.reload();
+});
 let context;
 let connected = false;
 function status(text, isError = false) {
@@ -19,39 +27,50 @@ async function request(action, data) {
   return result.data;
 }
 async function initialize() {
-  if (!/^[a-f0-9]{64}$/.test(browserId)) {
+  if (/^[a-f0-9]{64}$/.test(browserId) && !encodedKey) {
+    // Links from CLI 0.3 and earlier carry no public key.
+    status('This link is from an older version of the CLI. Update it with npm install -g settle-up-cli, then ask for a new link.', true);
+    return;
+  }
+  if (!/^[a-f0-9]{64}$/.test(browserId) || !/^B[A-Za-z0-9+/]{86}=$/.test(cliPublicKey || '')) {
     status('Open the private login link from your agent to connect.');
     byId('start-help').hidden = false;
     return;
   }
   try {
     context = await request('context', { browserId });
+    if (context.protocolVersion !== 2) throw new Error('This login service needs an update. Please try again later.');
+    if (context.publicKey !== cliPublicKey) throw new Error('This login link does not match your CLI. Ask your agent for a new link.');
     byId('login-form').hidden = false;
     status('');
     byId('expiry').textContent = `This link expires at ${new Date(context.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`;
     const remaining = Math.max(0, context.expiresAt - Date.now());
     window.setTimeout(() => {
-      if (!connected) { byId('login-form').hidden = true; status('This login link has expired. Ask your agent for a new link.', true); }
+      if (!connected) { byId('login-form').hidden = true; byId('password').value = ''; byId('api-key').value = ''; status('This login link has expired. Ask your agent for a new link.', true); }
     }, remaining);
   } catch (error) { status(error.message, true); byId('start-help').hidden = false; }
 }
 byId('login-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!context || Date.now() >= context.expiresAt) return;
+  for (const id of ['api-key', 'email', 'password']) byId(id).removeAttribute('aria-invalid');
   byId('sign-in').disabled = true;
   status('Signing in…');
-  const credentials = { browserId, email: byId('email').value.trim(), password: byId('password').value };
+  const credentials = { apiKey: byId('api-key').value.trim(), email: byId('email').value.trim(), password: byId('password').value, publicKey: cliPublicKey, browserId };
   try {
-    // The same-origin endpoint calls the existing hosted auth Worker using an
-    // internal service binding. No Firebase API key is delivered to the page.
-    await request('complete', credentials);
+    const envelope = await createFirebaseHandoff(credentials);
+    await request('complete', { browserId, envelope });
     connected = true;
+    byId('api-key').value = '';
     byId('login-form').hidden = true;
     byId('success').hidden = false;
     status('');
     byId('migration-note')?.setAttribute('hidden', '');
   } catch (error) {
     status(error.message || 'Could not connect. Please try again.', true);
-  } finally { credentials.password = ''; byId('password').value = ''; byId('sign-in').disabled = false; }
+    const fields = error.field === 'credentials' ? ['email', 'password'] : ['api-key', 'email', 'password'].includes(error.field) ? [error.field] : [];
+    for (const id of fields) byId(id).setAttribute('aria-invalid', 'true');
+    if (fields.length) byId(fields.at(-1)).focus();
+  } finally { credentials.password = ''; credentials.apiKey = ''; byId('password').value = ''; byId('sign-in').disabled = false; }
 });
 initialize();

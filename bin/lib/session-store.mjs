@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { FIREBASE_WEB_API_KEY } from './firebase-browser-login.mjs';
 
 // Keep OS integration behind this adapter; the CLI never handles encryption keys.
 // CRED_MAX_CREDENTIAL_BLOB_SIZE: Windows rejects larger generic credentials.
@@ -44,10 +45,12 @@ export function createSessionStore({
         || typeof value?.refreshToken !== 'string' || !value.refreshToken
         || typeof value?.uid !== 'string' || !value.uid
         || !Number.isFinite(value?.expiresAt)) throw new Error('Invalid stored session');
+    if (value.firebaseApiKey !== undefined && (typeof value.firebaseApiKey !== 'string' || !FIREBASE_WEB_API_KEY.test(value.firebaseApiKey))) throw new Error('Invalid stored Firebase key');
     // Persist only session fields, even if a legacy file has unrelated secrets.
     return {
       accessToken, refreshToken: value.refreshToken, uid: value.uid,
       ...(typeof value.email === 'string' ? { email: value.email } : {}), expiresAt: value.expiresAt,
+      ...(typeof value.firebaseApiKey === 'string' && FIREBASE_WEB_API_KEY.test(value.firebaseApiKey) ? { firebaseApiKey: value.firebaseApiKey } : {}),
     };
   }
 

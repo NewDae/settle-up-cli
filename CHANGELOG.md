@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+### Changed
+
+- **Sign-in no longer uses the hosted auth Worker.** You now enter the Settle Up API key (the public Firebase key Settle Up's apps use, starting with `AIza`) along with your email and password. `LOGIN.md` explains how to find it.
+- Browser login sends your email, password, and key straight to Firebase. The browser encrypts the session and key for your CLI before anything reaches the login site, whose backend is now only an encrypted relay with no auth binding or secrets.
+- Terminal login (`settleup auth login`) prompts for the key, or reads `SETTLEUP_FIREBASE_API_KEY`, and signs in directly with Firebase. Non-interactive terminal login requires that variable.
+- The CLI saves the key with your session and renews it directly with Firebase.
+- Login protocol version 2 pins the encryption key to the original link. Login links and the login site require CLI 0.4.0+.
+- Sign-in errors explain what went wrong and what to do next (mistyped or rejected key, wrong email or password, disabled account, too many attempts) and highlight the field to fix. A wrong email and a wrong password share one message, so the page never reveals whether an account exists.
+
+### Upgrading
+
+- Sessions saved by 0.3 can't be renewed and will ask you to sign in again within an hour of upgrading.
+- `SETTLEUP_AUTH_BASE_URL` is deprecated and no longer contacted.
+
 ## 0.3.0 (2026-10-12)
 
 ### Added

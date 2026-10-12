@@ -62,37 +62,38 @@ npm run docs:check
 
 ## Browser login website
 
-The existing Cloudflare Pages project serves `docs/`. Pages Functions under `functions/api/login/` provide browser pairing, using the `LOGIN_DB` D1 binding and the `AUTH_SERVICE` service binding to the existing `settleup-production` auth Worker. No Firebase API key belongs in Pages configuration or browser assets. The auth Worker needs no change for browser login.
+The Pages project serves `docs/`. Functions under `functions/api/login/` provide only an encrypted handoff through the `LOGIN_DB` D1 binding. The browser calls Firebase Auth directly using the user-entered API key. Pages needs no `AUTH_SERVICE` binding, Firebase key, or auth Worker. Production and previews use separate handoff databases.
 
-Before the first production deployment:
+For deployment:
 
-1. Create a D1 database with `npx wrangler d1 create settleup-browser-login` and put its returned ID in `wrangler.jsonc`.
-2. Apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --remote`.
-3. Confirm the `AUTH_SERVICE` binding targets the production Worker in the same Cloudflare account. `env.preview` in `wrangler.jsonc` binds preview deployments to `settleup-staging` and a separate D1 database. Create it with `npx wrangler d1 create settleup-browser-login-staging`, put its ID in `env.preview`, and apply the migration with `--env preview`. Never point a public preview at production credentials.
-4. Run `npm run docs:sync`, `npm test`, and `npm run docs:check`.
-5. Deploy from the repository root with `npx wrangler pages deploy docs --project-name settleupcli`. Deploying only static files without Functions will not enable login. Publish a CLI release with the browser flags after checking the live site.
+1. Create/configure the production D1 database in `wrangler.jsonc` (existing IDs are already configured), then apply `npx wrangler d1 migrations apply LOGIN_DB --remote`.
+2. Configure a separate preview database under `env.preview` and apply migrations with `--env preview`.
+3. Run `npm run docs:sync`, `npm test`, and `npm run docs:check`.
+4. Deploy from the root with `npx wrangler pages deploy docs --project-name settleupcli`, including Functions and `_headers`. Remove any old `AUTH_SERVICE` binding from Pages configuration. The login CSP allows same-origin requests and only `https://identitytoolkit.googleapis.com` for Firebase password verification.
+5. Publish CLI **0.4.0+** alongside the website update. Protocol version 2 rejects older browser-login clients and servers; users with a pending old link should cancel with `auth logout`, update the CLI, and start again. Test the coordinated release before promoting it. CLI 0.4.0 never contacts the auth Worker; it remains deployed only for 0.3 clients and can be retired when you're ready to drop them.
 
-Local development: apply the migration with `npx wrangler d1 migrations apply LOGIN_DB --local`, run the auth Worker locally with `npm run auth:dev`, then run `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`. Use `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` with matching local/staging API/auth configuration. The public website uses no third-party scripts on the login page; CSP allows only same-origin requests. Keep request-body logging disabled in both hosted services and any proxy.
+Local development: apply migrations with `npx wrangler d1 migrations apply LOGIN_DB --local`, then run `npx wrangler pages dev docs`. No local auth Worker is needed. Set `SETTLEUP_LOGIN_BASE_URL=http://localhost:8788` and use explicit sandbox database/auth settings with a sandbox API key. Do not use production credentials in an unreviewed preview. Keep request-body logging disabled.
 
-`npm run docs:sync` also updates the embedded machine guide. Login endpoint tests use real SQLite SQL, a local HTTP server, the real CLI executable, and a stub of the existing auth Worker. They do not verify production bindings or actual Firebase credentials.
+`npm run docs:sync` copies the shared browser cryptography and direct-Firebase helper into `docs/` (as `login-crypto.js` and `login-firebase.js`, so the `/login*` security headers cover them) and updates the embedded machine guide. Tests use real SQLite SQL, a localhost relay, the real CLI, and mocked Firebase responses. The page-controller test checks the actual form script’s request destinations and ensures its backend sees only ciphertext. Live Firebase/browser checks remain separate from deterministic tests.
 
 ## Auth Worker source
 
-The complete hosted auth implementation lives in [server/auth-worker/](server/auth-worker/README.md), alongside the CLI and website. Its deployment configuration was imported unchanged; the only source change since import removes upstream Firebase error codes from responses. `npm test` includes its login, refresh, validation, rate-limit, and credential-logging checks.
+The retired hosted auth implementation, used only by CLI 0.3 and earlier, lives in [server/auth-worker/](server/auth-worker/README.md), alongside the CLI and website. Its deployment configuration was imported unchanged; the only source change since import removes upstream Firebase error codes from responses. `npm test` includes its login, refresh, validation, rate-limit, and credential-logging checks.
 
-Use `npm run auth:dev` for local staging development, or the explicit `auth:deploy:staging` / `auth:deploy:production` scripts for authorized deployments. These target the existing Workers and preserve their secret bindings; no live secrets were moved into this repository. Keep Worker local development secrets in ignored files under `server/auth-worker/`, separate from root CLI environment files. See the Worker README for configuration and the limits of public-source verification.
+Use `npm run auth:dev` for local staging development, or the explicit `auth:deploy:staging` / `auth:deploy:production` scripts for authorized deployments. These legacy-only commands target the existing Workers and preserve their secret bindings; no live secrets were moved into this repository. Keep Worker local development secrets in ignored files under `server/auth-worker/`, separate from root CLI environment files. See the Worker README for configuration and the limits of public-source verification.
 
 ## Repository map
 
 | Path | Responsibility |
 |---|---|
 | `bin/settleup.mjs` | CLI executable, validation, help, and schema examples. |
-| `server/auth-worker/` | Hosted auth Worker source, deployment configuration, and operating instructions. |
+| `server/auth-worker/` | Retired auth Worker source, kept for CLI 0.3 clients until it is shut down. |
 | `server/browser-login.mjs` | Website pairing and encrypted session handoff. |
 | `functions/api/login/` | Pages Functions route that serves `server/browser-login.mjs`. |
 | `migrations/` | D1 schema for pending browser logins and rate limits. |
-| `bin/lib/browser-login.mjs` | CLI side of browser login: start, poll, cancel, pending key file. |
-| `bin/lib/browser-crypto.mjs` | ECDH + HKDF + AES-GCM handoff encryption shared by the CLI and website. |
+| `bin/lib/browser-login.mjs` | CLI side of protocol-v2 browser login: start, poll, cancel, pending key file. |
+| `bin/lib/browser-crypto.mjs` | ECDH + HKDF + AES-GCM handoff encryption shared by the CLI and browser. |
+| `bin/lib/firebase-browser-login.mjs` | Browser Firebase sign-in and encrypted session creation; also exports the API key format check. |
 | `docs/` | Website: landing page, login page, and generated agent guide copies. |
 | `wrangler.jsonc` | Pages project bindings (production and preview). |
 | `bin/lib/session-store.mjs` | Session storage in the OS credential store or explicit file. |

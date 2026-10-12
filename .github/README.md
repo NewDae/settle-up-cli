@@ -10,7 +10,7 @@ An independent community integration, not an official Settle Up client.
 
 ## What this CLI does
 
-- Signs in through the hosted auth wrapper (or direct Firebase auth) and keeps the session in the OS credential store.
+- Signs in directly with Firebase using the user's email, password, and Settle Up API key, in the browser or terminal, and keeps the session in the OS credential store. No hosted auth service is involved.
 - Creates groups through Settle Up's permission-stub flow, not `POST /groups`.
 - Manages members, categories, expenses, transfers and transactions, and reads debts and change history.
 - Lists and filters transactions by member, payer, category, type, date, limit and order.
@@ -43,18 +43,18 @@ The full requirements, identity model, patch semantics and open questions are in
         │                         │
         │                         └─ bin/lib/session-store.mjs ── OS credential store
         │                                                          (or explicit file)
-        ├──► auth service     login / refresh  (hosted wrapper or Firebase)
+        ├──► Firebase Auth    terminal sign-in and session refresh (user-supplied key)
         ├──► login website    browser login: start / poll / cancel  (Pages Functions + D1)
         └──► Settle Up database   REST paths, ?auth=<accessToken>
 
- user's browser ──► login website /login ──► auth Worker (service binding) ──► Firebase
-                         └─ session encrypted to the CLI's key, held once in D1 for the CLI to poll
+ user's browser ──► Firebase (API key + email/password)
+         └─ browser encrypts session + refresh key ──► Pages/D1 relay ──► CLI collects once
 ```
 
 - **One executable.** `bin/settleup.mjs` holds the command table (`HELP`), input schemas (`SCHEMAS`), validators, request helpers and error recovery. It has no runtime dependencies apart from the keyring module.
-- **The session store** (`bin/lib/session-store.mjs`) handles session read, write, migration and deletion. Each session is scoped by config directory, environment, database URL and auth URL.
+- **The session store** (`bin/lib/session-store.mjs`) handles session read, write, migration and deletion. Each session is scoped by config directory, environment, database URL and the deprecated auth URL setting.
 - **Environments.** `production` uses packaged defaults. `staging` and local setups need explicit URLs. See [LOGIN.md](../LOGIN.md#configuration-reference).
-- **The hosted auth Worker** lives in [`server/auth-worker/`](../server/auth-worker/README.md). The server, browser-login page, and CLI are all open source in this repository and run on Cloudflare; runtime secrets remain in Cloudflare. Anyone can self-host them (see [LOGIN.md](../LOGIN.md#self-hosting)).
+- **The login relay** (`server/browser-login.mjs`, served by Pages Functions) only stores encrypted handoffs in D1. It needs no secrets and can be [self-hosted](../LOGIN.md#self-hosting). The retired auth Worker source in [`server/auth-worker/`](../server/auth-worker/README.md) serves only CLI 0.3 and earlier.
 - **The backend mapping** from each command to its endpoint is in [API_REFERENCE.md](../API_REFERENCE.md).
 
 ## Developing

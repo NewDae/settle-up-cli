@@ -1,38 +1,31 @@
 # API Reference
 
-This file documents the auth wrapper and Settle Up backend paths used by the `settleup` CLI. The CLI behavior and JSON contracts are defined in [CLI_SPEC.md](CLI_SPEC.md); this file explains the backend paths behind those commands.
+This file documents the Firebase Auth, login relay, and Settle Up backend paths used by the `settleup` CLI. The CLI behavior and JSON contracts are defined in [CLI_SPEC.md](CLI_SPEC.md); this file explains the backend paths behind those commands.
 
 ## Configuration
 
-[LOGIN.md](LOGIN.md#configuration-reference) owns runtime configuration, precedence, token storage, and hosted/direct-auth selection. Database calls use the configured URL or packaged production default. Non-production requires explicit configuration.
+[LOGIN.md](LOGIN.md#configuration-reference) owns runtime configuration, precedence, and token storage. Database calls use the configured URL or packaged production default. Non-production requires explicit configuration.
 
 ## Auth Endpoints
 
-| Purpose | Method | Endpoint |
-|---|---|---|
-| Login | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/login` when overridden |
-| Refresh token | `POST` | packaged hosted auth endpoint, or `<SETTLEUP_AUTH_BASE_URL>/auth/refresh` when overridden |
+The CLI and login page call Firebase Auth directly with the user-supplied Settle Up API key. No hosted auth service is used.
 
-The auth wrapper handles Firebase auth. Authenticated backend calls pass the current access token as `?auth=<accessToken>`; [LOGIN.md](LOGIN.md) describes the returned session fields and refresh flow.
+| Purpose | Caller | Method | Endpoint |
+|---|---|---|---|
+| Password sign-in | Login page, or terminal `auth login` | `POST` | `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<API_KEY>` |
+| Token refresh | CLI | `POST` | `https://securetoken.googleapis.com/v1/token?key=<API_KEY>` |
 
-When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI bypasses hosted auth:
-
-| Purpose | Method | Direct Firebase endpoint |
-|---|---|---|
-| Password sign-in | `POST` | `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=<API_KEY>` |
-| Token refresh | `POST` | `https://securetoken.googleapis.com/v1/token?key=<API_KEY>` |
-
-Database paths still use the database URL, independently of the auth URL.
+Refresh uses the key saved with the session, falling back to `SETTLEUP_FIREBASE_API_KEY`. Authenticated backend calls pass the current access token as `?auth=<accessToken>`; [LOGIN.md](LOGIN.md) describes the session fields and refresh flow.
 
 ## Browser Login Endpoints
 
-Served by the website's Pages Functions at `<SETTLEUP_LOGIN_BASE_URL>/api/login/<action>` (production: `https://settleupcli.pages.dev`). All are `POST` with a JSON body and reject unknown fields. [LOGIN.md](LOGIN.md#browser-login-security-model) describes the security model.
+Served by the website's Pages Functions at `<SETTLEUP_LOGIN_BASE_URL>/api/login/<action>` (production: `https://settleupcli.pages.dev`). All are `POST` with a JSON body and reject unknown fields. [LOGIN.md](LOGIN.md#security-model) describes the security model.
 
 | Action | Caller | Body | Returns |
 |---|---|---|---|
-| `start` | CLI | `{ publicKey }` | `{ browserId, deviceToken, expiresAt, interval }`; rate-limited per IP |
-| `context` | Login page (same origin only) | `{ browserId }` | `{ publicKey, expiresAt }` |
-| `complete` | Login page (same origin only) | `{ browserId, email, password }` | `{ status: "ready" }`; verifies through the auth Worker's `/auth/login` via the `AUTH_SERVICE` binding |
+| `start` | CLI | `{ publicKey, protocolVersion: 2 }` | `{ browserId, deviceToken, expiresAt, interval, protocolVersion }`; rate-limited per IP; other protocol versions are rejected |
+| `context` | Login page (same origin only) | `{ browserId }` | `{ publicKey, expiresAt, protocolVersion }` |
+| `complete` | Login page (same origin only) | `{ browserId, envelope: { publicKey, iv, ciphertext } }` | `{ status: "ready" }`; stores the browser-encrypted session once. Credentials and readable tokens are rejected |
 | `poll` | CLI | `{ deviceToken }` | `{ status: "pending" }`, or `{ status: "ready", envelope }` once, then the row is deleted |
 | `cancel` | CLI | `{ deviceToken }` | `{ status: "cancelled" }` |
 
@@ -66,7 +59,7 @@ Backend paths are under:
 
 | CLI command | Backend calls |
 |---|---|
-| `auth login` | `POST /auth/login`; then ensures `/users/<uid>` exists. |
+| `auth login` | Firebase password sign-in; then ensures `/users/<uid>` exists. |
 | `auth login --browser` | `POST /api/login/start` on the login website. |
 | `auth login --complete [--wait]` | `POST /api/login/poll` until ready; then ensures `/users/<uid>` exists. |
 | `auth status` | Local credential store (or explicit file storage); see LOGIN.md. |

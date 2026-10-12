@@ -11,10 +11,10 @@
   <meta property="og:url" content="https://settleupcli.pages.dev/">
   <link rel="canonical" href="https://settleupcli.pages.dev/">
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css?v=get-started">
+  <link rel="stylesheet" href="./styles.css?v=direct-firebase-v1">
   <link rel="alternate" type="text/markdown" href="./agent.md" title="Settle Up CLI agent guide">
   <link rel="alternate" type="text/plain" href="./llms.txt" title="Agent instructions">
-  <script src="./main.js?v=get-started" defer></script>
+  <script src="./main.js?v=direct-firebase-v1" defer></script>
   <title>Settle Up CLI — shared expenses, less effort</title>
 </head>
 <body>
@@ -62,22 +62,23 @@
           <div id="copy-status" class="copy-status" role="status" aria-live="polite"></div>
           <div id="copy-fallback" hidden><label for="fallback-prompt">Copy this prompt and paste it into your agent</label><textarea id="fallback-prompt" readonly rows="7"></textarea></div>
         </section>
-        <section class="migration" aria-labelledby="migration-title"><div class="migration-art" aria-hidden="true"><span class="login-card">@<span>••••••</span></span><span class="login-tick">✓</span></div><div><p class="eyebrow">ONE THING BEFORE YOU CONNECT</p><h2 id="migration-title">Email + password only.</h2><p>If you use Google, Apple, or another sign-in method, migrate your account to email/password first.</p><a class="text-link" href="https://settleup.app/migrate-account">Migrate your Settle Up account ↗</a></div></section>
+        <section class="migration" aria-labelledby="migration-title"><div class="migration-art" aria-hidden="true"><span class="login-card">@<span>••••••</span></span><span class="login-tick">✓</span></div><div><p class="eyebrow">ONE THING BEFORE YOU CONNECT</p><h2 id="migration-title">Email, password, and the API key.</h2><p>You sign in with your Settle Up email and password plus the Settle Up API key, a public key starting with <code>AIza</code>. Use Google or Apple to sign in? Switch your account to email/password first.</p><a class="text-link" href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#finding-the-api-key">Find the API key ↗</a> <a class="text-link" href="https://settleup.app/migrate-account">Migrate your Settle Up account ↗</a></div></section>
         <section id="auth" class="auth-section" aria-labelledby="auth-title">
-          <div class="section-heading"><div><p class="eyebrow">BEFORE YOU SIGN IN</p><h2 id="auth-title">How auth works.</h2></div><p>Your agent never sees your password. You sign in on a private page, and your CLI receives an encrypted session that only it can open.</p></div>
+          <div class="section-heading"><div><p class="eyebrow">BEFORE YOU SIGN IN</p><h2 id="auth-title">How auth works.</h2></div><p>Your agent never sees your password, and neither do we. You sign in on a private page that talks straight to Firebase, and your CLI receives an encrypted session that only it can open.</p></div>
           <ol class="auth-flow" aria-label="Sign-in flow">
             <li><span class="auth-step">01</span><h3>Your agent asks</h3><p>The CLI creates a one-time sign-in link and a private key. The key never leaves the CLI’s machine.</p><span class="flow-label">Link expires in 10 minutes</span></li>
-            <li><span class="auth-step">02</span><h3>You sign in</h3><p>On this site, not in chat. Firebase, Settle Up’s sign-in provider, checks your password. It is never saved.</p><span class="flow-label">Password used once</span></li>
-            <li><span class="auth-step">03</span><h3>Your CLI connects</h3><p>The session is encrypted for that CLI’s key, collected once, then saved in your OS keychain by default.</p><span class="flow-label">The link alone can’t open it</span></li>
+            <li><span class="auth-step">02</span><h3>You sign in</h3><p>Enter your email, password, and the Settle Up API key. Your browser sends them straight to Firebase, Settle Up’s sign-in provider.</p><span class="flow-label">Browser → Firebase, nothing in between</span></li>
+            <li><span class="auth-step">03</span><h3>Your CLI connects</h3><p>Your browser encrypts the session for your CLI before handing it over. The CLI collects it once and saves it in your OS keychain.</p><span class="flow-label">The link alone can’t open it</span></li>
           </ol>
           <div class="auth-promises">
-            <div><h3>What we never do</h3><ul><li>Show your password to your agent or CLI</li><li>Store or log passwords</li><li>Put credentials in URLs or chat</li><li>Keep a readable copy of your session</li></ul></div>
-            <div><h3>Where it runs</h3><ul><li>Hosted on Cloudflare: this site and our auth Worker</li><li>Open source: <a href="https://github.com/NewDae/settle-up-cli">every line is on GitHub</a></li><li>Self-hostable: <a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting">run your own auth Worker</a></li><li>An independent project, not Settle Up itself</li></ul></div>
+            <div><h3>What we never do</h3><ul><li>Receive your password or API key on our servers</li><li>Show your password to your agent or CLI</li><li>Put passwords or session tokens in URLs or chat</li><li>Keep a readable copy of your session</li></ul></div>
+            <div><h3>Where it runs</h3><ul><li>Cloudflare hosts this site and the encrypted relay</li><li>Open source: <a href="https://github.com/NewDae/settle-up-cli">every line is on GitHub</a></li><li>Self-hostable: <a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting">run your own login site</a></li><li>An independent project, not Settle Up itself</li></ul></div>
           </div>
           <div class="auth-faq">
-            <details><summary>Who sees my password?</summary><p>Only this site’s backend and our hosted auth Worker. They hold it in memory just long enough to send it to Firebase for verification. Neither saves or logs it. Your agent, the CLI, and the chat never receive it. Terminal login (<code>settleup auth login</code>) uses the same Worker.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/server/auth-worker/src/index.mjs">Read password verification ↗</a></details>
-            <details><summary>What is stored, and for how long?</summary><p>While you sign in, the handoff database holds only an encrypted session, the CLI’s public key, and a hashed collection token. The row is deleted when the CLI collects it; otherwise it becomes unusable after 10 minutes and is purged. Rate limiting uses hashed IP addresses that expire after two minutes. Your long-lived session stays on your computer, in your OS credential store by default.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs">Read the session handoff ↗</a></details>
-            <details><summary>Is this official Settle Up login?</summary><p>No. This is an independent, open-source community integration. This site and our auth Worker are hosted on Cloudflare, and the code for both, along with the CLI, is on GitHub. Prefer to run it yourself? You can self-host the auth Worker and point the CLI at it.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting">How to self-host ↗</a></details>
+            <details><summary>Who sees my password?</summary><p>Only Firebase, Settle Up’s sign-in provider. Your browser sends it there directly; our server receives only an encrypted session, and your agent and CLI never receive the password at all. As with any website, you’re trusting the code this site serves; it’s open source, and you can self-host it.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/firebase-browser-login.mjs">Read the sign-in code ↗</a></details>
+            <details><summary>What is stored, and for how long?</summary><p>While you sign in, the handoff database holds only an encrypted session, the CLI’s public key, and a hashed collection token. The row is deleted when the CLI collects it; otherwise it becomes unusable after 10 minutes and is purged. Rate limiting uses hashed IP addresses that expire after two minutes. Your long-lived session and the API key stay on your computer, in the OS credential store by default, and the CLI renews the session directly with Firebase. Plaintext file storage requires an explicit opt-in.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs">Read the session handoff ↗</a></details>
+            <details><summary>Is this official Settle Up login?</summary><p>No. This is an independent, open-source community integration. The login page and its encrypted relay are hosted on Cloudflare, with the full source on GitHub. You can self-host them; they need no secrets.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting">How to self-host ↗</a></details>
+            <details><summary>What is the Settle Up API key, and where do I find it?</summary><p>It’s the public Firebase key Settle Up’s own apps use to reach their sign-in service. It starts with <code>AIza</code> and is 39 characters long. It isn’t a password and can’t open your account by itself. This tool doesn’t ship it, so you’ll copy it once from Settle Up’s web app; the guide shows how. Your CLI then keeps it with your session.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#finding-the-api-key">How to find the key ↗</a></details>
             <details><summary>What can my agent do, and how do I disconnect?</summary><p>Through the CLI, your agent can read your groups, balances, and expenses and make the changes you ask for. Run <code>settleup auth logout</code> to delete the saved session and cancel any pending link. To end every session everywhere, change your Settle Up password; existing access tokens lapse within an hour.</p><a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md">Read the login reference ↗</a></details>
           </div>
         </section>
@@ -97,11 +98,11 @@ npm install -g settle-up-cli
 settleup --version
 ```
 
-The command is `settleup`. No API key or backend setup is needed.
+The command is `settleup`. Version 0.4.0 or newer is required to sign in. No configuration or backend setup is needed.
 
 ## Sign in
 
-Email/password only. Users of Google, Apple, or another sign-in method should first migrate at https://settleup.app/migrate-account.
+The user signs in with their Settle Up email and password plus the Settle Up API key: the public Firebase key Settle Up&#x27;s apps use, starting with `AIza`. They enter all three on a private page, never in chat. If they don&#x27;t have the key, point them to https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#finding-the-api-key and don&#x27;t try to find it for them. Users of Google, Apple, or another sign-in method should first migrate at https://settleup.app/migrate-account.
 
 Start a browser login in the environment where you run the CLI:
 
@@ -109,7 +110,7 @@ Start a browser login in the environment where you run the CLI:
 settleup auth login --browser
 ```
 
-Show the user the returned `loginUrl` directly. Ask them to open it privately and enter their credentials on the hosted page. Do not open the link, fill in the form, or send the link anywhere else. Then finish on the same CLI configuration:
+Show the user the returned `loginUrl` directly. Ask them to open it privately and enter their email, password, and the Settle Up API key on the page. Do not open the link, fill in the form, or send the link anywhere else. Then finish on the same CLI configuration:
 
 ```sh
 settleup auth login --complete
@@ -125,16 +126,16 @@ Start a login only when the user asks you to connect. Never create a link becaus
 
 All of this is open source at https://github.com/NewDae/settle-up-cli.
 
-1. `--browser` creates a P-256 key pair. The private key stays in a local file under the CLI config directory (mode 0600 on Unix). The CLI sends the public key to the login website and gets back a link ID and a separate poll token. Code: [CLI side](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-login.mjs).
-2. The user opens the link and enters their email and password on the [login page](https://github.com/NewDae/settle-up-cli/blob/main/docs/login.js). The link ID is in the URL fragment, which browsers do not send to servers.
-3. The [website backend](https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs) (Cloudflare Pages) forwards the credentials to the [auth Worker](https://github.com/NewDae/settle-up-cli/blob/main/server/auth-worker/src/index.mjs) (Cloudflare Workers). The Worker verifies them with Firebase Auth using the Firebase API key held in its secrets. Neither stores nor logs the password.
-4. The backend [encrypts](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-crypto.mjs) the session to the CLI&#x27;s public key (ECDH, HKDF-SHA-256, AES-256-GCM). It stores only the ciphertext and a hash of the poll token in a [D1 table](https://github.com/NewDae/settle-up-cli/blob/main/migrations/0001_browser_login.sql) for up to 10 minutes. The browser receives only a completion status.
-5. `--complete` polls with the token, receives the ciphertext once (the row is then deleted), decrypts it, and saves the session in the OS credential store.
-6. Later commands refresh the session through the auth Worker. `auth logout` deletes it locally.
+1. `--browser` creates a P-256 key pair. The private key stays in a local file under the CLI config directory (mode 0600 on Unix). The CLI sends the public key to the login site and gets back a link ID and a separate poll token. The link carries the link ID and public key in its fragment. Code: [CLI side](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-login.mjs).
+2. The user opens the link and enters their email, password, and the Settle Up API key on the [login page](https://github.com/NewDae/settle-up-cli/blob/main/docs/login.js). The page checks that the site reports the same public key as the link before showing the form.
+3. The [browser](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/firebase-browser-login.mjs) sends them directly to Firebase Auth, Settle Up&#x27;s sign-in provider.
+4. The browser [encrypts](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-crypto.mjs) the session and key to the CLI&#x27;s public key (ECDH, HKDF-SHA-256, AES-256-GCM). The site&#x27;s [relay](https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs) stores only that ciphertext and a hash of the poll token in [D1](https://github.com/NewDae/settle-up-cli/blob/main/migrations/0001_browser_login.sql) for up to 10 minutes. It never receives the password, key, or a readable token.
+5. `--complete` collects the ciphertext once, decrypts it, and saves the session and key in the OS credential store.
+6. Later commands renew the session directly with Firebase. `auth logout` deletes the session and key locally.
 
-This is an independent community integration, not official Settle Up login. Users can [self-host](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting) the services. Details: [LOGIN.md security model](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#browser-login-security-model) and https://settleupcli.pages.dev/#auth.
+This is an independent community integration, not official Settle Up login. Users trust the JavaScript the login site serves and can [self-host](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting) it. Details: [LOGIN.md security model](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#security-model) and https://settleupcli.pages.dev/#auth.
 
-Never request passwords or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Private terminal login with `settleup auth login` remains available. The CLI refreshes its session through the hosted Worker automatically.
+Never request API keys, passwords, or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Users can also sign in privately in their own terminal with `settleup auth login`, which prompts for the key, email, and password.
 
 ### Browser login reference
 
@@ -142,7 +143,7 @@ Outputs (stdout, `data` field of the JSON envelope):
 
 ```jsonc
 // settleup auth login --browser
-{ &quot;status&quot;: &quot;pending&quot;, &quot;loginUrl&quot;: &quot;https://settleupcli.pages.dev/login#&lt;64 hex&gt;&quot;, &quot;expiresAt&quot;: 1777872000000, &quot;next&quot;: &quot;...&quot; }
+{ &quot;status&quot;: &quot;pending&quot;, &quot;loginUrl&quot;: &quot;https://settleupcli.pages.dev/login#&lt;64 hex&gt;.&lt;encoded public key&gt;&quot;, &quot;expiresAt&quot;: 1777872000000, &quot;next&quot;: &quot;...&quot; }
 // settleup auth login --complete   (user not done yet; exit code 0)
 { &quot;status&quot;: &quot;pending&quot;, &quot;expiresAt&quot;: 1777872000000, &quot;next&quot;: &quot;...&quot; }
 // settleup auth login --complete   (signed in; session saved)
@@ -162,8 +163,9 @@ Outputs (stdout, `data` field of the JSON envelope):
 | `API_RATE_LIMITED` | Too many links from this IP | Wait a minute, then retry |
 | `API_REQUEST_FAILED` | Login service unreachable | Retry; if it persists, offer terminal login |
 | `INVALID_INPUT` &quot;SETTLEUP_LOGIN_BASE_URL&quot; | Custom or staging environment without a login site | Set `SETTLEUP_LOGIN_BASE_URL`, or use terminal login |
+| `AUTH_REFRESH_FAILED` &quot;older CLI version&quot; | Session saved by CLI 0.3 or earlier, which can&#x27;t be renewed | Start a new browser login |
 
-Wrong-password attempts happen on the web page, not in the CLI; the page shows the error to the user.
+Wrong-password and wrong-key attempts happen on the web page, not in the CLI; the page shows the error to the user.
 
 `auth status` reports local session presence; a successful read confirms live access. Verify the connection:
 

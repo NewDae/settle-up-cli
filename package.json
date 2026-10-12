@@ -1,6 +1,6 @@
 {
   "name": "settle-up-cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A JSON-first Settle Up CLI for people and AI agents: groups, expenses, transfers, and debts.",
   "license": "MIT",
   "author": "Anshul Ravikumar",
@@ -21,7 +21,7 @@
   "scripts": {
     "docs:sync": "node scripts/sync-agent-docs.mjs",
     "docs:check": "node scripts/sync-agent-docs.mjs --check",
-    "test": "node --test test/cli-*.test.mjs test/negative-inputs.test.mjs test/spec-contracts.test.mjs test/browser-login.test.mjs test/auth-worker.test.mjs",
+    "test": "node --test test/cli-*.test.mjs test/negative-inputs.test.mjs test/spec-contracts.test.mjs test/browser-login.test.mjs test/auth-worker.test.mjs test/firebase-browser-login.test.mjs",
     "test:live": "SETTLEUP_RUN_LIVE=1 node --test test/sandbox-live.test.mjs",
     "test:all": "node --test test/*.test.mjs",
     "integration:e2e": "node scripts/run-cli-integration.mjs",

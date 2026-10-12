@@ -90,39 +90,22 @@ globalThis.fetch = async (url, options = {}) => {
     url: String(url),
     method: options.method || 'GET',
     headers: options.headers || {},
-    body: bodyText ? JSON.parse(bodyText) : null,
+    body: !bodyText ? null : options.body instanceof URLSearchParams ? Object.fromEntries(options.body) : JSON.parse(bodyText),
   };
   fs.appendFileSync(process.env.SETTLEUP_MOCK_LOG, JSON.stringify(entry) + '\\n');
 
   const mode = process.env.SETTLEUP_MOCK_MODE;
-  if (entry.url.endsWith('/auth/login') && mode === 'login-rejected-envelope') {
-    return json({ ok: false, error: { code: 'AUTH_INVALID', message: 'Invalid email or password' } }, 401);
+  if (entry.url.startsWith('https://identitytoolkit.googleapis.com/') && mode === 'bad-key') {
+    return json({ error: { code: 400, message: 'API key not valid. Please pass a valid API key.' } }, 400);
   }
-  if (entry.url.endsWith('/auth/login') && mode === 'login-rejected-plain') {
-    return json({ error: 'Unauthorized' }, 401);
-  }
-  if (entry.url.endsWith('/auth/login') && mode === 'login-unavailable') {
-    return json({ error: 'Service unavailable' }, 503);
+  if (entry.url.startsWith('https://identitytoolkit.googleapis.com/') && mode === 'login-unavailable') {
+    return json({ error: { code: 503, message: 'UNAVAILABLE' } }, 503);
   }
   if (entry.url.startsWith('https://identitytoolkit.googleapis.com/') && entry.body.email.startsWith('wrong')) {
     return json({ error: { code: 400, message: 'INVALID_LOGIN_CREDENTIALS' } }, 400);
   }
-  if (mode === 'new-user' && entry.url.includes('/users/u1.json')) {
+  if (mode === 'new-user' && entry.url.includes('/users/u-env.json')) {
     return json(entry.method === 'PUT' ? entry.body : null);
-  }
-
-  if (entry.url.endsWith('/auth/login')) {
-    return json({
-      ok: true,
-      data: {
-        accessToken: 'token-1',
-        refreshToken: 'refresh-1',
-        uid: 'u1',
-        email: entry.body.email,
-        expiresAt: 1777872000000,
-      },
-      meta: { environment: 'staging' },
-    });
   }
 
   if (entry.url.startsWith('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword')) {
@@ -141,20 +124,6 @@ globalThis.fetch = async (url, options = {}) => {
       refresh_token: 'refresh-2',
       user_id: 'u1',
       expires_in: '3600',
-    });
-  }
-
-  if (entry.url.endsWith('/auth/refresh')) {
-    return json({
-      ok: true,
-      data: {
-        accessToken: 'new-token',
-        refreshToken: 'refresh-2',
-        uid: 'u1',
-        email: 'me@example.com',
-        expiresAt: 1777872000000,
-      },
-      meta: { environment: 'staging' },
     });
   }
 
@@ -224,65 +193,56 @@ test('unknown commands return the stable invalid-input envelope', () => {
   assert.deepEqual(output.meta, { environment: 'test' });
 });
 
-test('auth login calls the configured auth wrapper and stores staging session separately', async () => {
-  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-auth-'));
+const KEY = `AIza${'K'.repeat(35)}`;
+
+function directLogin({ input = 'env@example.com\nsecret\n', env = {} } = {}) {
+  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-login-'));
   const mock = createFetchMock();
-  const apiBaseUrl = `${mock.baseUrl}/db`;
-  const authBaseUrl = `${mock.baseUrl}/auth-service`;
-
-  const result = await runCliAsync(['auth', 'login'], {
-    input: 'me@example.com\nsecret\n',
+  return runCliAsync(['auth', 'login'], {
+    input,
     env: {
-      ...mock.env,
-      SETTLEUP_CLI_CONFIG_DIR: configDir,
-      SETTLEUP_ENV: 'staging',
-      SETTLEUP_API_BASE_URL: apiBaseUrl,
-      SETTLEUP_AUTH_BASE_URL: authBaseUrl,
-      SETTLEUP_FIREBASE_API_KEY: '',
+      ...mock.env, SETTLEUP_CLI_CONFIG_DIR: configDir, SETTLEUP_ENV: 'staging',
+      SETTLEUP_API_BASE_URL: mock.baseUrl, SETTLEUP_AUTH_BASE_URL: '', SETTLEUP_FIREBASE_API_KEY: KEY, ...env,
     },
-  });
+  }).then((result) => ({ ...result, requests: mock.requests(), configDir, mock }));
+}
 
+test('terminal login goes directly to Firebase, saves the key, and isolates environments', async () => {
+  const result = await directLogin();
   assert.equal(result.status, 0, JSON.stringify(result.output));
-  assert.equal(result.output.ok, true);
-  assert.equal(result.output.data.uid, 'u1');
-  const requests = mock.requests();
-  assert.equal(requests[0].url, `${authBaseUrl}/auth/login`);
-  assert.deepEqual(requests[0].body, { email: 'me@example.com', password: 'secret' });
-  assert.equal(requests[1].url, `${apiBaseUrl}/users/u1.json?auth=token-1`);
+  assert.equal(result.output.data.uid, 'u-env');
+  assert.equal(JSON.stringify(result.output).includes(KEY), false);
+  assert.equal(result.requests[0].url, `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${KEY}`);
+  assert.deepEqual(result.requests[0].body, { email: 'env@example.com', password: 'secret', returnSecureToken: true });
+  assert.equal(result.requests[1].url, `${result.mock.baseUrl}/users/u-env.json?auth=env-token`);
+  assert.equal(result.requests.some((request) => /workers\.dev|\/auth\//.test(request.url)), false);
 
-  const authPath = path.join(configDir, 'staging', readdirSync(path.join(configDir, 'staging')).find(name => name.startsWith('auth-')));
+  const authPath = path.join(result.configDir, 'staging', readdirSync(path.join(result.configDir, 'staging')).find(name => name.startsWith('auth-')));
   const auth = JSON.parse(readFileSync(authPath, 'utf8'));
-  assert.equal(auth.accessToken, 'token-1');
+  assert.equal(auth.accessToken, 'env-token');
+  assert.equal(auth.firebaseApiKey, KEY);
+  assert.equal('password' in auth, false);
 
   const productionStatus = await runCliAsync(['auth', 'status'], {
-    env: {
-      SETTLEUP_CLI_CONFIG_DIR: configDir,
-      SETTLEUP_ENV: 'production',
-    },
+    env: { SETTLEUP_CLI_CONFIG_DIR: result.configDir, SETTLEUP_ENV: 'production' },
   });
   assert.equal(productionStatus.output.data.authenticated, false);
 });
 
-test('production login works from a clean directory without user configuration', async () => {
-  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-default-auth-'));
-  const cwd = mkdtempSync(path.join(tmpdir(), 'settleup-cli-default-cwd-'));
-  const mock = createFetchMock();
-  const result = await runCliAsync(['auth', 'login'], {
-    cwd,
-    input: 'me@example.com\nsecret\n',
-    env: {
-      ...mock.env,
-      SETTLEUP_CLI_CONFIG_DIR: configDir,
-      SETTLEUP_ENV: 'production',
-      SETTLEUP_API_BASE_URL: '',
-      SETTLEUP_AUTH_BASE_URL: '',
-      SETTLEUP_FIREBASE_API_KEY: '',
-    },
-  });
-  assert.equal(result.status, 0, JSON.stringify(result.output));
-  const requests = mock.requests();
-  assert.equal(requests[0].url, 'https://settleup-production.newdae.workers.dev/auth/login');
-  assert.equal(requests[1].url, 'https://settle-up-live.firebaseio.com/users/u1.json?auth=token-1');
+test('non-interactive terminal login without a key fails before any request', async () => {
+  const result = await directLogin({ env: { SETTLEUP_FIREBASE_API_KEY: '' } });
+  assert.equal(result.status, 1);
+  assert.equal(result.output.error.code, 'INVALID_INPUT');
+  assert.match(result.output.error.message, /SETTLEUP_FIREBASE_API_KEY.*--browser/);
+  assert.deepEqual(result.requests, []);
+});
+
+test('a malformed key is rejected locally without echoing it', async () => {
+  const result = await directLogin({ env: { SETTLEUP_FIREBASE_API_KEY: 'not-a-real-key-123456789' } });
+  assert.equal(result.output.error.code, 'INVALID_INPUT');
+  assert.match(result.output.error.message, /AIza/);
+  assert.equal(JSON.stringify(result.output).includes('not-a-real-key'), false);
+  assert.deepEqual(result.requests, []);
 });
 
 test('unconfigured staging login fails before reaching production', async () => {
@@ -294,7 +254,7 @@ test('unconfigured staging login fails before reaching production', async () => 
       SETTLEUP_ENV: 'staging',
       SETTLEUP_API_BASE_URL: '',
       SETTLEUP_AUTH_BASE_URL: '',
-      SETTLEUP_FIREBASE_API_KEY: '',
+      SETTLEUP_FIREBASE_API_KEY: KEY,
     },
   });
   assert.equal(result.status, 1);
@@ -302,126 +262,101 @@ test('unconfigured staging login fails before reaching production', async () => 
   assert.deepEqual(mock.requests(), []);
 });
 
-test('expired sessions refresh through the auth wrapper before backend access', async () => {
+function writeSession(configDir, extra = {}) {
+  mkdirSync(path.join(configDir, 'staging'), { recursive: true });
+  writeFileSync(path.join(configDir, 'staging', 'auth.json'), JSON.stringify({
+    accessToken: 'old-token', refreshToken: 'refresh-1', uid: 'u1', email: 'me@example.com', expiresAt: Date.now() - 1000, ...extra,
+  }));
+}
+
+test('expired sessions refresh directly with Firebase using the saved key', async () => {
   const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-refresh-'));
   const mock = createFetchMock();
-  const apiBaseUrl = `${mock.baseUrl}/db`;
-  const authBaseUrl = `${mock.baseUrl}/auth-service`;
-  const authDir = path.join(configDir, 'staging');
-  mkdirSync(authDir, { recursive: true });
-  writeFileSync(path.join(authDir, 'auth.json'), JSON.stringify({
-    accessToken: 'old-token',
-    refreshToken: 'refresh-1',
-    uid: 'u1',
-    email: 'me@example.com',
-    expiresAt: Date.now() - 1000,
-  }));
-
+  writeSession(configDir, { firebaseApiKey: KEY });
   const result = await runCliAsync(['users', 'me'], {
     env: {
-      ...mock.env,
-      SETTLEUP_CLI_CONFIG_DIR: configDir,
-      SETTLEUP_ENV: 'staging',
-      SETTLEUP_API_BASE_URL: apiBaseUrl,
-      SETTLEUP_AUTH_BASE_URL: authBaseUrl,
-      SETTLEUP_FIREBASE_API_KEY: '',
+      ...mock.env, SETTLEUP_CLI_CONFIG_DIR: configDir, SETTLEUP_ENV: 'staging',
+      SETTLEUP_API_BASE_URL: `${mock.baseUrl}/db`, SETTLEUP_FIREBASE_API_KEY: '',
     },
   });
-
   assert.equal(result.status, 0, JSON.stringify(result.output));
-  assert.equal(result.output.data.uid, 'u1');
   const requests = mock.requests();
-  assert.equal(requests[0].url, `${authBaseUrl}/auth/refresh`);
-  assert.equal(requests[1].url, `${apiBaseUrl}/users/u1.json?auth=new-token`);
+  assert.equal(requests[0].url, `https://securetoken.googleapis.com/v1/token?key=${KEY}`);
+  assert.equal(requests[1].url, `${mock.baseUrl}/db/users/u1.json?auth=new-token`);
 });
 
-test('.env local development uses Firebase auth directly and shell env wins', async () => {
+test('a pre-0.4 session without a key asks for a new sign-in and contacts no auth service', async () => {
+  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-legacy-refresh-'));
+  const mock = createFetchMock();
+  writeSession(configDir);
+  const result = await runCliAsync(['users', 'me'], {
+    env: {
+      ...mock.env, SETTLEUP_CLI_CONFIG_DIR: configDir, SETTLEUP_ENV: 'staging',
+      SETTLEUP_API_BASE_URL: `${mock.baseUrl}/db`, SETTLEUP_AUTH_BASE_URL: `${mock.baseUrl}/auth-service`, SETTLEUP_FIREBASE_API_KEY: '',
+    },
+  });
+  assert.equal(result.status, 1);
+  assert.equal(result.output.error.code, 'AUTH_REFRESH_FAILED');
+  assert.match(result.output.error.message, /older CLI version.*sign in again/);
+  assert.match(result.output.error.details.help, /auth login --browser/);
+  assert.deepEqual(mock.requests(), []);
+});
+
+test('.env local development is read and shell env wins', async () => {
   const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-dotenv-config-'));
   const cwd = mkdtempSync(path.join(tmpdir(), 'settleup-cli-dotenv-cwd-'));
   const mock = createFetchMock();
+  const dotenvKey = `AIza${'E'.repeat(35)}`;
 
   writeFileSync(path.join(cwd, '.env'), [
     'SETTLEUP_ENV=staging',
     `SETTLEUP_API_BASE_URL=${mock.baseUrl}`,
-    'SETTLEUP_FIREBASE_API_KEY=from-dotenv',
+    `SETTLEUP_FIREBASE_API_KEY=${dotenvKey}`,
     '',
   ].join('\n'));
 
   const result = await runCliAsync(['auth', 'login'], {
     cwd,
     input: 'env@example.com\nsecret\n',
-    env: {
-      ...mock.env,
-      SETTLEUP_MOCK_MODE: 'dotenv',
-      SETTLEUP_CLI_CONFIG_DIR: configDir,
-      SETTLEUP_FIREBASE_API_KEY: 'from-shell',
-    },
+    env: { ...mock.env, SETTLEUP_CLI_CONFIG_DIR: configDir, SETTLEUP_FIREBASE_API_KEY: KEY },
   });
 
-  assert.equal(result.status, 0);
+  assert.equal(result.status, 0, JSON.stringify(result.output));
   assert.equal(result.output.meta.environment, 'staging');
   const requests = mock.requests();
-  assert.match(requests[0].url, /identitytoolkit\.googleapis\.com/);
-  assert.match(requests[0].url, /key=from-shell/);
-  assert.deepEqual(requests[0].body, {
-    email: 'env@example.com',
-    password: 'secret',
-    returnSecureToken: true,
-  });
-  assert.equal(requests[1].url, `${mock.baseUrl}/users/u-env.json?auth=env-token`);
+  assert.match(requests[0].url, new RegExp(`key=${KEY}$`));
 });
 
-function hostedLogin(mode, input = 'me@example.com\nsecret\n') {
-  const configDir = mkdtempSync(path.join(tmpdir(), 'settleup-cli-login-'));
-  const mock = createFetchMock();
-  return runCliAsync(['auth', 'login'], {
-    input,
-    env: {
-      ...mock.env, SETTLEUP_MOCK_MODE: mode, SETTLEUP_CLI_CONFIG_DIR: configDir, SETTLEUP_ENV: 'staging',
-      SETTLEUP_API_BASE_URL: `${mock.baseUrl}/db`, SETTLEUP_AUTH_BASE_URL: `${mock.baseUrl}/auth-service`, SETTLEUP_FIREBASE_API_KEY: '',
-    },
-  }).then((result) => ({ ...result, requests: mock.requests(), configDir }));
-}
+test('direct Firebase sign-in rejection is AUTH_INVALID, not a connectivity error', async () => {
+  const result = await directLogin({ input: 'wrong@example.com\nsecret\n' });
+  assert.equal(result.output.error.code, 'AUTH_INVALID');
+  assert.equal(result.output.error.details.status, 400);
+  assert.match(result.output.error.message, /email, password/);
+  assert.match(result.output.error.details.help, /API key/);
+  assert.equal(JSON.stringify(result.output).includes('secret'), false);
+  assert.equal(result.requests.length, 1);
+});
 
-for (const mode of ['login-rejected-envelope', 'login-rejected-plain']) {
-  test(`hosted sign-in rejection (${mode}) is AUTH_INVALID with sign-in guidance and no saved session`, async () => {
-    const result = await hostedLogin(mode);
-    assert.equal(result.status, 1);
-    assert.equal(result.output.error.code, 'AUTH_INVALID');
-    assert.match(result.output.error.details.help, /email\/password sign-in/);
-    assert.equal(result.requests.length, 1);
-    assert.equal(JSON.stringify(result.output).includes('secret'), false);
-  });
-}
+test('a key Firebase rejects is reported as a key problem', async () => {
+  const result = await directLogin({ env: { SETTLEUP_MOCK_MODE: 'bad-key' } });
+  assert.equal(result.output.error.code, 'AUTH_INVALID');
+  assert.match(result.output.error.message, /API key was not accepted/);
+});
 
-test('a hosted auth outage stays API_REQUEST_FAILED rather than blaming credentials', async () => {
-  const result = await hostedLogin('login-unavailable');
+test('a Firebase outage stays API_REQUEST_FAILED rather than blaming credentials', async () => {
+  const result = await directLogin({ env: { SETTLEUP_MOCK_MODE: 'login-unavailable' } });
   assert.equal(result.output.error.code, 'API_REQUEST_FAILED');
   assert.equal(result.output.error.details.status, 503);
 });
 
-test('direct Firebase sign-in rejection is AUTH_INVALID, not a connectivity error', async () => {
-  const mock = createFetchMock();
-  const result = await runCliAsync(['auth', 'login'], {
-    input: 'wrong@example.com\nsecret\n',
-    env: {
-      ...mock.env, SETTLEUP_CLI_CONFIG_DIR: mkdtempSync(path.join(tmpdir(), 'settleup-cli-login-')),
-      SETTLEUP_ENV: 'staging', SETTLEUP_API_BASE_URL: mock.baseUrl, SETTLEUP_FIREBASE_API_KEY: 'test-key',
-    },
-  });
-  assert.equal(result.output.error.code, 'AUTH_INVALID');
-  assert.equal(result.output.error.details.status, 400);
-  assert.equal(mock.requests().length, 1);
-});
-
 test('first sign-in creates the missing app-level user profile', async () => {
-  const result = await hostedLogin('new-user');
+  const result = await directLogin({ env: { SETTLEUP_MOCK_MODE: 'new-user' } });
   assert.equal(result.status, 0, JSON.stringify(result.output));
   const [, read, write] = result.requests;
   assert.equal(read.method, 'GET');
   assert.equal(write.method, 'PUT');
-  assert.match(write.url, /\/users\/u1\.json\?auth=token-1$/);
-  assert.equal(write.body.email, 'me@example.com');
+  assert.match(write.url, /\/users\/u-env\.json\?auth=env-token$/);
+  assert.equal(write.body.email, 'env@example.com');
 });
 
 for (const [label, expiresIn, refreshes] of [['within the final minute', 30_000, true], ['with time remaining', 600_000, false]]) {
@@ -430,7 +365,7 @@ for (const [label, expiresIn, refreshes] of [['within the final minute', 30_000,
     const mock = createFetchMock();
     mkdirSync(path.join(configDir, 'staging'), { recursive: true });
     writeFileSync(path.join(configDir, 'staging', 'auth.json'), JSON.stringify({
-      accessToken: 'token-1', refreshToken: 'refresh-1', uid: 'u1', email: 'me@example.com', expiresAt: Date.now() + expiresIn,
+      accessToken: 'token-1', refreshToken: 'refresh-1', uid: 'u1', email: 'me@example.com', expiresAt: Date.now() + expiresIn, firebaseApiKey: KEY,
     }));
     const result = await runCliAsync(['users', 'me'], {
       env: {
@@ -439,6 +374,6 @@ for (const [label, expiresIn, refreshes] of [['within the final minute', 30_000,
       },
     });
     assert.equal(result.status, 0, JSON.stringify(result.output));
-    assert.equal(mock.requests().some((request) => request.url.endsWith('/auth/refresh')), refreshes);
+    assert.equal(mock.requests().some((request) => request.url.startsWith('https://securetoken.googleapis.com/')), refreshes);
   });
 }
