@@ -69,7 +69,7 @@ test('actual login-page controller sends credentials to Firebase and only cipher
   const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\n/m, '');
   vm.runInNewContext(source, {
     document: { getElementById: element }, location: { hash: `#${browserId}.${encodeURIComponent(keys.publicKey)}`, pathname: '/login' },
-    history: { replaceState() {} }, window: { setTimeout() {} }, AbortSignal, Date, fetch: fetchImpl,
+    history: { replaceState() {} }, window: { setTimeout() {}, addEventListener() {} }, AbortSignal, Date, fetch: fetchImpl,
     createFirebaseHandoff: input => createFirebaseHandoff(input, fetchImpl),
   });
   await new Promise(resolve => setImmediate(resolve));
@@ -94,7 +94,7 @@ test('login page rejects a relay that substitutes the CLI public key before coll
   const source = fs.readFileSync(new URL('../docs/login.js', import.meta.url), 'utf8').replace(/^import .*;\n/m, '');
   vm.runInNewContext(source, {
     document: { getElementById }, location: { hash: `#${browserId}.${encodeURIComponent(keys.publicKey)}`, pathname: '/login' },
-    history: { replaceState() {} }, window: { setTimeout() {} }, AbortSignal, Date,
+    history: { replaceState() {} }, window: { setTimeout() {}, addEventListener() {} }, AbortSignal, Date,
     fetch: async url => {
       assert.equal(url, '/api/login/context');
       return Response.json({ ok: true, data: { publicKey: substituted.publicKey, expiresAt: Date.now() + 600_000, protocolVersion: 2 } });

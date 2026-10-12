@@ -6,6 +6,10 @@ let cliPublicKey;
 try { cliPublicKey = decodeURIComponent(encodedKey || ''); } catch {}
 // The fragment is never sent to the server, analytics, or referrers.
 history.replaceState(null, '', location.pathname);
+// Opening a fresh CLI link in the same tab must initialize its new pairing.
+window.addEventListener('hashchange', () => {
+  if (/^#[a-f0-9]{64}\./.test(location.hash)) location.reload();
+});
 let context;
 let connected = false;
 function status(text, isError = false) {
