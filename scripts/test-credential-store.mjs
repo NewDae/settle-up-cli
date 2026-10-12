@@ -20,7 +20,9 @@ try {
     let result = h.run(['auth', 'status']); success(result);
     assert.equal(result.output.data.storage, 'keyring'); assert.equal(result.output.data.authenticated, true);
     success(h.run(['users', 'me']));
-    assert.deepEqual(h.requests().find(r => r.path.endsWith('/refresh')).body, { refreshToken: 'dummy-refresh' });
+    // Refresh goes directly to Firebase with the key saved alongside the session.
+    assert.deepEqual(h.requests().find(r => r.path === '/v1/token').body, { grant_type: 'refresh_token', refresh_token: 'dummy-refresh' });
+    assert.equal(h.requests().some(r => r.path.startsWith('/auth/')), false);
     assert.equal(h.run(['auth', 'status'], { changes: { SETTLEUP_ENV: 'other' } }).output.data.authenticated, false);
     success(h.run(['auth', 'logout']));
     success(h.run(['auth', 'logout']));
