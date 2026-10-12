@@ -43,8 +43,8 @@ SETTLEUP_FIREBASE_API_KEY=<sandbox Firebase Web API key>
 
 Use sandbox configuration locally. Worker dev starts from this directory, so it does not load the CLI's root environment files. Run the website separately with `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`; see [DEVELOPMENT.md](../../DEVELOPMENT.md#browser-login-website).
 
-## Publication and trust
+## Publication and self-hosting
 
-Worker source/configuration are public for inspection and self-hosting. Real `.env` and `.dev.vars` files stay ignored. The npm package includes only its existing client allowlist, and the website serves only `docs/`; Worker source is not shipped as a browser asset or installed CLI module.
+Worker source and configuration are public, so you can read them or deploy your own copy. See [self-hosting](../../LOGIN.md#self-hosting). Real `.env` and `.dev.vars` files stay ignored. The npm package includes only its existing client allowlist, and the website serves only `docs/`; Worker source is not shipped as a browser asset or installed CLI module.
 
-Public source makes the credential-handling implementation reviewable. Users still trust whoever operates the hosted deployment: code with Worker deployment permission can access runtime secrets, and source publication cannot prove that a particular live deployment matches the repository. Protect deployment access, review changes, and keep credentials out of logs.
+Operators: limit who has Worker deployment permission, since it grants access to runtime secrets. Review changes before deploying, and keep credentials out of logs.

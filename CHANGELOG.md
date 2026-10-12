@@ -3,7 +3,7 @@
 ## 0.3.0 (unreleased)
 
 - Harden browser login. The encrypted handoff now derives its AES-256-GCM key with HKDF-SHA-256, bound to the login link. The auth Worker no longer returns upstream Firebase error codes, which could reveal whether an email has an account. Pages preview deployments bind the staging auth Worker and a separate D1 database. The login page warns before sign-in and shows the link expiry.
-- Rewrite the landing page's "How auth works" section around what users trust and what is guaranteed, and document the browser login security model in `LOGIN.md`. Agent guidance now requires confirming the connected email and creating links only when the user asks.
+- Rewrite the landing page's "How auth works" section around guarantees and where it runs (Cloudflare, open source, self-hostable), and document the browser login security model in `LOGIN.md`. Agent guidance now requires confirming the connected email and creating links only when the user asks.
 
 - Simplify browser sign-in to email/password through the private CLI link, with no code confirmation. Add an auth diagram and FAQ to the landing page, and use matching navigation and footers on both pages.
 - Consolidate the existing hosted auth Worker source, deployment configuration, and tests into `server/auth-worker/` in the public CLI repository. Existing Worker identities and Cloudflare secrets are retained.

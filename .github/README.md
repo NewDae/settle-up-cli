@@ -50,7 +50,7 @@ The full requirements, identity model, patch semantics and open questions are in
 - **One executable.** `bin/settleup.mjs` holds the command table (`HELP`), input schemas (`SCHEMAS`), validators, request helpers and error recovery. It has no runtime dependencies apart from the keyring module.
 - **The session store** (`bin/lib/session-store.mjs`) handles session read, write, migration and deletion. Each session is scoped by config directory, environment, database URL and auth URL.
 - **Environments.** `production` uses packaged defaults. `staging` and local setups need explicit URLs. See [LOGIN.md](../LOGIN.md#configuration-reference).
-- **The hosted auth Worker** lives in [`server/auth-worker/`](../server/auth-worker/README.md). The server, browser-login page, and CLI are all open source in this repository; runtime secrets remain in Cloudflare. Public source helps review credential handling but does not establish what code a hosted deployment is running.
+- **The hosted auth Worker** lives in [`server/auth-worker/`](../server/auth-worker/README.md). The server, browser-login page, and CLI are all open source in this repository and run on Cloudflare; runtime secrets remain in Cloudflare. Anyone can self-host them (see [LOGIN.md](../LOGIN.md#self-hosting)).
 - **The backend mapping** from each command to its endpoint is in [API_REFERENCE.md](../API_REFERENCE.md).
 
 ## Developing

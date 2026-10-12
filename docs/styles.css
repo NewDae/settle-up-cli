@@ -135,6 +135,7 @@ textarea { width:100%; padding:12px; font:13px/1.6 ui-monospace,monospace; borde
 .auth-promises li+li { margin-top:4px; }
 .auth-promises>div:first-child li::before { content:"✕"; position:absolute; left:0; color:var(--green); font-size:11px; }
 .auth-promises>div:last-child li::before { content:"·"; position:absolute; left:4px; color:var(--muted); font-weight:700; }
+.auth-promises a { color:var(--green); }
 .auth-faq { max-width:800px; }
 .auth-faq details { border-top:1px solid var(--line); padding:17px 0; }
 .auth-faq details:last-child { border-bottom:1px solid var(--line); }
