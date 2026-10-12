@@ -18,6 +18,28 @@ settleup auth login --complete
 settleup groups list
 ```
 
+```mermaid
+sequenceDiagram
+  participant CLI as settleup CLI
+  participant Site as Login website (Cloudflare Pages + D1)
+  participant Worker as Auth Worker (Cloudflare)
+  participant FB as Firebase Auth
+  actor User as User's browser
+  CLI->>Site: start(publicKey)
+  Site-->>CLI: browserId, deviceToken
+  CLI-->>User: loginUrl (/login#browserId)
+  User->>Site: complete(browserId, email, password)
+  Site->>Worker: /auth/login (service binding)
+  Worker->>FB: verify password
+  FB-->>Worker: session
+  Worker-->>Site: session
+  Site->>Site: encrypt session to CLI publicKey, store once
+  Site-->>User: ready (no tokens)
+  CLI->>Site: poll(deviceToken)
+  Site-->>CLI: encrypted envelope (row deleted)
+  CLI->>CLI: decrypt with private key, save to OS credential store
+```
+
 `--browser` returns a JSON object with `status: pending`, `loginUrl`, `expiresAt`, and `next`. A link lasts 10 minutes. The user's browser and the CLI can be on different computers. `--complete` returns `status: pending` until the page finishes; it saves the session when ready. `--complete --wait` polls every three seconds until ready or expired. `auth logout` clears the local pending login and requests remote cancellation.
 
 The hosted login page is part of this independent community integration, not an official Settle Up sign-in page. Everything runs on Cloudflare: the login page and its backend on Cloudflare Pages, and password verification in a Cloudflare Worker. The [auth Worker source and configuration](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker), website backend, and CLI are all in this repository, and you can [self-host](#self-hosting) them. The same-origin Pages Function forwards the email/password to the existing auth Worker through an internal Cloudflare service binding. The Worker holds the Firebase API key and performs Firebase password verification. The key is never returned to the browser or bundled with the CLI. Refresh continues through the existing Worker.

@@ -52,7 +52,7 @@ What it covers:
 | Read commands | `groups list`, `members list` (including `--active-only`), `members get`, `categories list`, `transactions get`, and `transactions delete` send the expected request and shape; missing records return `MEMBER_NOT_FOUND` or `TRANSACTION_NOT_FOUND`. |
 | List filters | Every `transactions list` filter, including recipient-only member matches and inclusive local-day `--to` bounds; ordering and limits for transactions and changes; invalid filter values fail with `INVALID_INPUT` before any request. |
 | Sign-in and sessions | Rejected hosted and direct Firebase sign-in return `AUTH_INVALID` while outages stay `API_REQUEST_FAILED`; first sign-in creates the user profile; sessions refresh within the final minute but not earlier; backend 401 maps to `GROUP_ACCESS_DENIED`. |
-| Auth Worker | The imported server’s login/refresh Firebase mapping, closed browser access, validation, rate-limit binding, stable failures, no credential logging, and no-store responses. |
+| Auth Worker | Login/refresh Firebase mapping, closed browser access, validation, rate-limit binding, stable failures without upstream Firebase codes, no credential logging, and no-store responses. |
 | Browser login | Pairing and pending state, private-key file permissions, encrypted handoff, wrong-key/tampering rejection, one-time collection, expiry, cancellation, same-origin checks, bounded inputs, rate limiting, sanitized hosted-auth failures, and hosted Worker refresh. Firebase API keys and readable tokens are never returned to the page. |
 | Server task | Debt recalculation constructs `{ request: { groupId } }`; a missing group ID is rejected locally. |
 

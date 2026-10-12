@@ -44,7 +44,11 @@ The full requirements, identity model, patch semantics and open questions are in
         │                         └─ bin/lib/session-store.mjs ── OS credential store
         │                                                          (or explicit file)
         ├──► auth service     login / refresh  (hosted wrapper or Firebase)
+        ├──► login website    browser login: start / poll / cancel  (Pages Functions + D1)
         └──► Settle Up database   REST paths, ?auth=<accessToken>
+
+ user's browser ──► login website /login ──► auth Worker (service binding) ──► Firebase
+                         └─ session encrypted to the CLI's key, held once in D1 for the CLI to poll
 ```
 
 - **One executable.** `bin/settleup.mjs` holds the command table (`HELP`), input schemas (`SCHEMAS`), validators, request helpers and error recovery. It has no runtime dependencies apart from the keyring module.

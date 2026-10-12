@@ -89,6 +89,12 @@ Use `npm run auth:dev` for local staging development, or the explicit `auth:depl
 | `bin/settleup.mjs` | CLI executable, validation, help, and schema examples. |
 | `server/auth-worker/` | Hosted auth Worker source, deployment configuration, and operating instructions. |
 | `server/browser-login.mjs` | Website pairing and encrypted session handoff. |
+| `functions/api/login/` | Pages Functions route that serves `server/browser-login.mjs`. |
+| `migrations/` | D1 schema for pending browser logins and rate limits. |
+| `bin/lib/browser-login.mjs` | CLI side of browser login: start, poll, cancel, pending key file. |
+| `bin/lib/browser-crypto.mjs` | ECDH + HKDF + AES-GCM handoff encryption shared by the CLI and website. |
+| `docs/` | Website: landing page, login page, and generated agent guide copies. |
+| `wrangler.jsonc` | Pages project bindings (production and preview). |
 | `bin/lib/session-store.mjs` | Session storage in the OS credential store or explicit file. |
 | `test/` | Public CLI tests and opt-in live backend tests. |
 | `scripts/run-cli-integration.mjs` | Live CLI workflow and dated reports. |

@@ -85,7 +85,7 @@ h2 { font-size:22px; line-height:1.4; letter-spacing:-.6px; margin:0; }
 .group-chip span { color:#71839a; font-size:15px; }
 .group-chip:nth-child(2) { transform:translateX(13px); }
 .group-chip:nth-child(3) { transform:translateX(-7px); }
-.agent-section { padding:44px 0; }
+.agent-section { padding:44px 0; scroll-margin-top:24px; }
 .section-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:32px; }
 .section-heading .eyebrow { margin-bottom:10px; }
 .section-heading h2 { font:normal 32px/1.2 Georgia,"Times New Roman",serif; letter-spacing:-1px; }
