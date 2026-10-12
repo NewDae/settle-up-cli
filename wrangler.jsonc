@@ -6,8 +6,7 @@
   "d1_databases": [{
     "binding": "LOGIN_DB",
     "database_name": "settleup-browser-login",
-    // Replace after creating the production D1 database. Local dev uses this ID.
-    "database_id": "00000000-0000-0000-0000-000000000000",
+    "database_id": "58edb2f6-ca01-4afa-9042-7ea4ec78d495",
     "migrations_dir": "migrations"
   }],
   // Preview deployments run unreviewed branches on public URLs. They must never
@@ -18,8 +17,7 @@
       "d1_databases": [{
         "binding": "LOGIN_DB",
         "database_name": "settleup-browser-login-staging",
-        // Replace after creating the staging D1 database.
-        "database_id": "00000000-0000-0000-0000-000000000001",
+        "database_id": "f6c9e8b8-d062-4691-806b-6042fc7c1df5",
         "migrations_dir": "migrations"
       }]
     }
