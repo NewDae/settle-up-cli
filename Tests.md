@@ -52,13 +52,15 @@ What it covers:
 | Read commands | `groups list`, `members list` (including `--active-only`), `members get`, `categories list`, `transactions get`, and `transactions delete` send the expected request and shape; missing records return `MEMBER_NOT_FOUND` or `TRANSACTION_NOT_FOUND`. |
 | List filters | Every `transactions list` filter, including recipient-only member matches and inclusive local-day `--to` bounds; ordering and limits for transactions and changes; invalid filter values fail with `INVALID_INPUT` before any request. |
 | Sign-in and sessions | Rejected hosted and direct Firebase sign-in return `AUTH_INVALID` while outages stay `API_REQUEST_FAILED`; first sign-in creates the user profile; sessions refresh within the final minute but not earlier; backend 401 maps to `GROUP_ACCESS_DENIED`. |
-| Auth Worker | Login/refresh Firebase mapping, closed browser access, validation, rate-limit binding, stable failures without upstream Firebase codes, no credential logging, and no-store responses. |
-| Browser login | Pairing and pending state, private-key file permissions, encrypted handoff, wrong-key/tampering rejection, one-time collection, expiry, cancellation, same-origin checks, bounded inputs, rate limiting, sanitized hosted-auth failures, and hosted Worker refresh. Firebase API keys and readable tokens are never returned to the page. |
+| Legacy auth Worker | Login/refresh Firebase mapping, closed browser access, validation, rate-limit binding, stable failures without upstream Firebase codes, no credential logging, and no-store responses. |
+| Browser login | Pairing and pending state, private-key file permissions, encrypted handoff, wrong-key/tampering rejection, one-time collection, expiry, cancellation, same-origin checks, bounded inputs, rate limiting, credential/envelope rejection, CLI key pinning, and direct Firebase refresh using the stored key. The relay receives no readable session or Firebase key. |
 | Server task | Debt recalculation constructs `{ request: { groupId } }`; a missing group ID is rejected locally. |
 
 Reusable inputs and backend response samples live in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). [test/helpers/cli-harness.mjs](test/helpers/cli-harness.mjs) launches the executable with isolated configuration and a fresh test session, captures outgoing requests, and supplies scripted responses. Unexpected requests fail; temporary files are removed after each run. Validation lives in the CLI, with no parallel test-only implementation.
 
 These local tests verify what the wrapper sends and returns. They do not prove backend persistence, permissions, debt calculation, or how the backend applies a PATCH. Those behaviors require live backend checks; see the live-suite coverage and end-to-end limitations below.
+
+Direct browser tests also verify the real page controller sends key/email/password only to Firebase, sanitizes failures, encrypts the returned session, and posts only ciphertext to the relay.
 
 ## Live Backend Suite
 

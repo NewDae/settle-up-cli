@@ -1,159 +1,92 @@
 # Login And Auth Configuration
 
-This page explains terminal and browser login without shipping the integration’s Firebase API key.
-
-## Sign in
-
-Run `settleup auth login` in your terminal and enter your Settle Up email/password. The password is hidden while you type. Browser login also uses email/password; it does not add Google, Apple, or other provider sign-in. If you use one of those methods, first [migrate your account to email/password](https://settleup.app/migrate-account).
-
-The password is sent over HTTPS to the hosted auth service and is not saved by the CLI. Email, user ID, expiry, and session tokens use the OS credential store by default. Refresh uses the refresh token, never a saved password. `settleup auth logout` removes credentials for the selected configuration; it does not revoke copies held elsewhere.
-
 ## Browser login for agents
+
+Requires `settle-up-cli` **0.4.0 or newer**, a compatible Settle Up Firebase Web API key, and an email/password account. The key must belong to the Firebase project that authenticates your Settle Up account; a key from an unrelated project will not work. Users of Google, Apple, or another provider should first [migrate to email/password](https://settleup.app/migrate-account).
 
 ```sh
 settleup auth login --browser
-# Open the returned loginUrl privately and sign in.
-# Enter email/password on the page, then finish in the same CLI environment:
+# Open loginUrl privately. Enter the Firebase API key, email, and password.
 settleup auth login --complete
 settleup groups list
 ```
 
+The browser sends the API key and credentials **directly to Firebase Auth** over HTTPS. It encrypts the resulting session, including the key needed for refresh, before posting to the website backend. The backend is an encrypted handoff relay: it accepts no email, password, API key, or readable tokens, has no Firebase credentials, and does not call an auth Worker. The CLI decrypts the session and saves the supplied key alongside its tokens in the selected credential store. Subsequent refresh goes directly from the CLI to Firebase; the password is never saved or handed to the CLI.
+
 ```mermaid
 sequenceDiagram
   participant CLI as settleup CLI
-  participant Site as Login website (Cloudflare Pages + D1)
-  participant Worker as Auth Worker (Cloudflare)
+  participant Relay as Website relay (Cloudflare Pages + D1)
+  actor Browser as User's browser
   participant FB as Firebase Auth
-  actor User as User's browser
-  CLI->>Site: start(publicKey)
-  Site-->>CLI: browserId, deviceToken
-  CLI-->>User: loginUrl (/login#browserId)
-  User->>Site: complete(browserId, email, password)
-  Site->>Worker: /auth/login (service binding)
-  Worker->>FB: verify password
-  FB-->>Worker: session
-  Worker-->>Site: session
-  Site->>Site: encrypt session to CLI publicKey, store once
-  Site-->>User: ready (no tokens)
-  CLI->>Site: poll(deviceToken)
-  Site-->>CLI: encrypted envelope (row deleted)
-  CLI->>CLI: decrypt with private key, save to OS credential store
+  CLI->>Relay: start(publicKey, protocolVersion=2)
+  Relay-->>CLI: browserId, deviceToken, expiresAt
+  CLI-->>Browser: loginUrl with browserId and publicKey in fragment
+  Browser->>Relay: context(browserId)
+  Relay-->>Browser: publicKey, expiresAt, protocolVersion
+  Browser->>Browser: compare publicKey with original link
+  Browser->>FB: API key, email, password
+  FB-->>Browser: session tokens
+  Browser->>Browser: encrypt session + API key for CLI
+  Browser->>Relay: complete(browserId, encrypted envelope)
+  Relay-->>Browser: ready
+  CLI->>Relay: poll(deviceToken)
+  Relay-->>CLI: ciphertext (row deleted)
+  CLI->>CLI: decrypt, save to OS credential store
+  CLI->>FB: refresh directly with saved API key
 ```
 
-`--browser` returns a JSON object with `status: pending`, `loginUrl`, `expiresAt`, and `next`. A link lasts 10 minutes. The user's browser and the CLI can be on different computers. `--complete` returns `status: pending` until the page finishes; it saves the session when ready. `--complete --wait` polls every three seconds until ready or expired. `auth logout` clears the local pending login and requests remote cancellation.
+`--browser` returns `status: pending`, `loginUrl`, `expiresAt`, and `next`. Links last 10 minutes; the browser and CLI can run on different computers. `--complete` returns `pending` until sign-in finishes; `--complete --wait` polls every three seconds. `auth logout` removes the saved session/key and cancels a pending handoff. It does not revoke copies elsewhere.
 
-The hosted login page is part of this independent community integration, not an official Settle Up sign-in page. Everything runs on Cloudflare: the login page and its backend on Cloudflare Pages, and password verification in a Cloudflare Worker. The [auth Worker source and configuration](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker), website backend, and CLI are all in this repository, and you can [self-host](#self-hosting) them. The same-origin Pages Function forwards the email/password to the existing auth Worker through an internal Cloudflare service binding. The Worker holds the Firebase API key and performs Firebase password verification. The key is never returned to the browser or bundled with the CLI. Refresh continues through the existing Worker.
-
-The hosted services necessarily handle the password and readable session in memory during sign-in. The flow does not persist passwords, log credentials, or put them in URLs. The website backend encrypts only the required session fields for the CLI's temporary public key before storing a handoff. The browser receives only a completion status. A separate hashed poll credential allows the CLI to collect the encrypted session once; a browser link cannot collect it. Successful collection removes the encrypted handoff. Expired rows are inaccessible and are cleaned up on subsequent login requests.
-
-The CLI keeps its temporary private key and poll credential in a mode-0600 file under its mode-0700 environment directory on Unix. It removes that file on completion, logout, or the next start/completion after expiry. On Windows, protection relies on the containing directory's ACLs. Long-lived sessions use the configured OS credential store or explicit file storage. Neither passwords nor tokens are printed to stdout.
+The key must allow Firebase Authentication sign-in and token refresh from the CLI; browser-only application restrictions can block CLI refresh. No key is bundled in npm or browser assets. The page holds credentials only in memory, clears the password after every attempt, and clears the key after success or expiry. The browser sees the Firebase response so it can encrypt it; only ciphertext is sent to our backend. The CLI reports the connected email, without printing the API key or tokens. Code: [browser verification](bin/lib/firebase-browser-login.mjs), [page controller](docs/login.js), [relay](server/browser-login.mjs), and [cryptography](bin/lib/browser-crypto.mjs).
 
 ### Browser login security model
 
 | Concern | Protection |
 |---|---|
-| Password exposure to the agent or chat | The password is typed only on the hosted page. The CLI output contains the link, expiry, and finally the connected `uid`/`email`, never a password or token. |
-| Link leaked (chat logs, screenshots) | The link ID is in the URL fragment, so browsers do not send it to servers or referrers. The page also removes it from the address bar. It cannot collect the session. Collection needs the CLI's separate 256-bit poll token, stored only as a SHA-256 hash server-side. The session is encrypted to the CLI's private key. |
-| Handoff interception or tampering | The session is encrypted with ephemeral P-256 ECDH, then HKDF-SHA-256 and AES-256-GCM. The link ID is bound into both key derivation and the authenticated data. Collection is a single atomic `DELETE … RETURNING`. |
-| Link phishing (an attacker sends you their link) | Inherent to any device-style login: whoever created the link receives the session. The page warns before sign-in and shows the expiry, links last 10 minutes, and the CLI reports the connected email so the user can confirm it. Agents must create links only when the user asks. |
-| Session swap (someone with your link signs in their own account) | The CLI reports the connected email; agents are instructed to confirm it with the user. |
-| Cross-site requests | `context` and `complete` require a same-origin `Origin`. The page is served with a strict same-origin CSP, `frame-ancestors 'none'`, and `no-referrer`. |
-| Password guessing and account enumeration | The auth Worker applies a per-IP limit of 10 requests per minute, shared by login and refresh. Link creation has a separate limit of 10 per minute, keyed by a hashed IP. Errors never include upstream Firebase codes, so a response does not reveal whether an email has an account. |
-| Unreviewed code handling production passwords | Pages preview deployments bind the staging auth Worker and a separate D1 database (`env.preview` in `wrangler.jsonc`). |
+| Password or API key sent to our backend | Only Firebase receives them. The relay accepts strictly an encrypted envelope and rejects credential/session fields. |
+| Relay replaces the CLI encryption key | The public key is included in the original CLI link's fragment. The page checks the relay's context against that key before showing the form and encrypts to the original key. |
+| Leaked link | The fragment is removed from the address bar and is not sent in normal HTTP navigation or referrers. A link cannot collect or decrypt the session; collection requires a separate 256-bit poll token stored only as a hash server-side. |
+| Interception or tampering | P-256 ECDH, HKDF-SHA-256, and AES-256-GCM bind the ciphertext to the link ID. Collection is an atomic one-time delete. |
+| Link phishing or someone signs in the wrong account | Only use a link you just asked your agent/CLI to create. Whoever created it gets that session. Confirm the email reported by the CLI. |
+| Cross-site requests | Browser endpoints require same-origin `Origin`. CSP permits connections only to the site and Firebase's exact sign-in host, with no third-party scripts, framing, or referrers. |
+| Abuse | Link creation retains its per-IP quota; Firebase controls sign-in/refresh rate limits and API-key restrictions. Our relay no longer handles or rate-limits password verification. Provider errors shown on the page are generic. |
+| Public previews | Preview deployments use a separate handoff database. They have no auth Worker binding or server-side Firebase key. |
+| Older clients/servers | Protocol version 2 requires CLI 0.4.0+. Mixed versions fail before signing in instead of silently falling back to hosted auth. |
 
-What this cannot protect against: malware on the device used to sign in, or a user who signs in through a link they did not request. Changing the Settle Up password revokes Firebase refresh tokens; already issued access tokens expire within an hour.
+This remains an independent community integration. Users trust the code their browser runs: a compromised host could serve modified JavaScript. Public source and direct Firebase requests make the intended flow inspectable; they do not prove a live deployment matches the source. Firebase Web API keys identify a project and are not user credentials, but their restrictions and quota matter ([Firebase guidance](https://firebase.google.com/docs/projects/api-keys)).
 
-Custom environments or database/auth overrides must explicitly set `SETTLEUP_LOGIN_BASE_URL` to the matching website's HTTPS origin. HTTP loopback is allowed for local development. Unconfigured browser login fails instead of silently using production. See [deployment instructions](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md#browser-login-website).
+The temporary CLI private key and poll token remain in a mode-0600 file under its mode-0700 environment directory on Unix; Windows relies on directory ACLs. They are removed after completion, logout, or expired-login cleanup. Expired relay rows become inaccessible and are swept on subsequent requests. Malware running as the user can access local credentials. Changing the Settle Up password revokes Firebase refresh tokens; issued access tokens can remain valid until expiry.
 
 ### Self-hosting
 
-To run your own copy, deploy the [auth Worker](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker) to your Cloudflare account with your own `SETTLEUP_FIREBASE_API_KEY` secret. Then point the CLI at it:
+Deploy `docs/`, the Pages Functions, and the D1 migration to your own Cloudflare account, then set `SETTLEUP_LOGIN_BASE_URL=https://<your-site>`. No auth Worker, service binding, or Firebase secret is needed for the relay. See [DEVELOPMENT.md](DEVELOPMENT.md#browser-login-website). Custom database/auth environments also require an explicit matching login origin; HTTP is allowed only for loopback development.
 
-```sh
-SETTLEUP_AUTH_BASE_URL=https://<your-worker>.workers.dev settleup auth login
-```
+## Terminal login and legacy sessions
 
-For browser login as well, deploy `docs/` and the Pages Functions with your Worker bound as `AUTH_SERVICE` (see [DEVELOPMENT.md](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md#browser-login-website)). Then also set `SETTLEUP_LOGIN_BASE_URL=https://<your-site>`.
+For direct terminal login, set `SETTLEUP_FIREBASE_API_KEY` locally and run `settleup auth login`. It reads email/password privately and sends them directly to Firebase. Browser login does not require the key in the CLI environment: enter it on the page instead.
 
-## Published Package Flow
-
-Normal users of the published npm package do not need to configure auth or Firebase settings. The package uses the default production Settle Up database URL and the default hosted auth endpoint.
-
-The CLI uses the hosted auth endpoint only for `/auth/login` and `/auth/refresh`. It uses the Settle Up Firebase Realtime Database URL for `.json` data paths such as `/users`, `/groups`, and `/transactions`.
-
-```mermaid
-flowchart LR
-  CLI["settleup CLI"]
-  AuthURL["Hosted Auth URL"]
-  AuthService["Hosted Auth Service"]
-  SettleUpAuth["Settle Up auth flow"]
-  FirebaseDB["Settle Up Firebase Realtime Database"]
-
-  CLI -- "POST /auth/login, /auth/refresh" --> AuthURL
-  AuthURL --> AuthService
-  AuthService -- "login/refresh logic" --> SettleUpAuth
-  CLI -- "/users, /groups, /transactions .json?auth=token" --> FirebaseDB
-```
-
-In this flow, the published CLI does not need `SETTLEUP_FIREBASE_API_KEY`. The auth service owns that credential and returns only the session fields the CLI needs:
-
-```json
-{
-  "accessToken": "<id-token>",
-  "refreshToken": "<refresh-token>",
-  "uid": "<firebase-uid>",
-  "email": "user@example.com",
-  "expiresAt": 1777872000000
-}
-```
+For compatibility, existing terminal login without a local key and saved sessions without a key still use the legacy hosted `/auth/login` and `/auth/refresh` service. That separate service receives credentials/tokens; it is **not part of the new browser flow**. The source in `server/auth-worker/` is retained for those older clients. This PR does not shut down deployed Workers. To move a legacy session to the direct flow, sign out and sign in with browser login on CLI 0.4.0+.
 
 ## Configuration reference
 
 | Variable | Meaning |
 |---|---|
-| `SETTLEUP_ENV` | Session namespace and default selection; default `production`. Use `staging` or `test` for separate environments. |
-| `SETTLEUP_API_BASE_URL` | Optional database/API URL override. Production has a packaged default; non-production needs explicit configuration. |
-| `SETTLEUP_AUTH_BASE_URL` | Optional hosted-auth URL override. |
-| `SETTLEUP_FIREBASE_API_KEY` | Direct Firebase Auth key for local/staging/internal use; takes precedence over hosted auth when present. |
-| `SETTLEUP_LOGIN_BASE_URL` | Browser-login website origin; production defaults to `https://settleupcli.pages.dev`. Required for custom/staging environments. |
-| `SETTLEUP_CLI_CONFIG_DIR` | Optional session directory override; default `~/.config/settleup-cli`. The environment subdirectory remains separate. |
-| `SETTLEUP_AUTH_STORAGE` | `keyring` by default; `file` explicitly opts into plaintext session storage. |
+| `SETTLEUP_ENV` | Session namespace and defaults; `production` by default. |
+| `SETTLEUP_API_BASE_URL` | Database/API URL override. Production has a packaged Settle Up database default; other environments require a URL. |
+| `SETTLEUP_AUTH_BASE_URL` | Legacy hosted-auth override and session namespace. Not used to authenticate or refresh new browser sessions. |
+| `SETTLEUP_FIREBASE_API_KEY` | Optional local key for direct terminal login and legacy-session refresh. New browser sessions use the key saved with that session. |
+| `SETTLEUP_LOGIN_BASE_URL` | Browser relay origin; defaults to `https://settleupcli.pages.dev` for default production. Required for custom/staging environments. |
+| `SETTLEUP_CLI_CONFIG_DIR` | Session directory override; defaults to `~/.config/settleup-cli`. |
+| `SETTLEUP_AUTH_STORAGE` | `keyring` by default; `file` explicitly opts into plaintext tokens and key storage. |
 
-The CLI reads `.env` from its working directory; existing shell variables win. For test-runner env files, see [developer setup](https://github.com/NewDae/settle-up-cli/blob/main/DEVELOPMENT.md#environment-setup).
-
-## Staging Or Local Auth Flow
-
-For staging, local development, or a trusted internal production run, a developer can skip the hosted auth endpoint and provide a Firebase Web API key locally.
-
-Production with a local key:
-
-```bash
-SETTLEUP_ENV=production
-SETTLEUP_API_BASE_URL=https://<prod-settle-up-realtime-database>
-SETTLEUP_FIREBASE_API_KEY=<prod-firebase-web-api-key>
-```
-
-Staging with a local key:
-
-```bash
-SETTLEUP_ENV=staging
-SETTLEUP_API_BASE_URL=https://<staging-settle-up-realtime-database>
-SETTLEUP_FIREBASE_API_KEY=<staging-firebase-web-api-key>
-```
-
-When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI signs in and refreshes directly through Firebase Auth. Database commands still use `SETTLEUP_API_BASE_URL`.
-
-Do not publish or commit real Firebase keys. Keep them in local `.env` files, shell environment variables, or the hosted auth service configuration.
+The CLI reads `.env` from its working directory; existing shell variables win. Do not commit or log keys or session data. For test-runner env files, see [developer setup](DEVELOPMENT.md#environment-setup).
 
 ## Automation and storage
 
-Interactive login hides the password and sends prompts to stderr, keeping stdout JSON. Non-TTY login accepts email and password on separate stdin lines for controlled automation such as integration tests; it has no credential command-line flags. Agents should still ask the user to sign in privately rather than collect credentials.
+Terminal prompts go to stderr and hide the password; stdout stays JSON. Non-TTY terminal login accepts email and password on separate stdin lines for controlled integration tests, with a Firebase key configured in the environment if direct verification is required. Never ask users for keys, passwords, or tokens in chat. Agents should give them a private browser link.
 
-The CLI checks expiry and refreshes before authenticated commands, including within the final minute before expiry. `auth status` reports the selected storage and local session presence; a successful read such as `groups list` confirms live access. Storage requirements and migration are described below.
-
-## Fallback Behavior
-
-`SETTLEUP_AUTH_BASE_URL` is only needed for a custom hosted-auth setup. If it is not set and no Firebase key is provided, the CLI uses the packaged default auth endpoint when available, then falls back to `SETTLEUP_API_BASE_URL` for older deployments where auth and database proxying share one base URL.
+The CLI refreshes before authenticated commands when expiry is within a minute. `auth status` reports local presence without the key or tokens; a successful read such as `groups list` confirms live access.
 
 ## Credential storage
 

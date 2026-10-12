@@ -82,7 +82,7 @@ The executable is `settleup`. Write JSON is supplied with `--input <path>` or `-
 
 | Command | Required flags / input | Behavior |
 |---|---|---|
-| `auth login` | Optional `--browser`, or `--complete [--wait]` | Start a private hosted login link, then collect an encrypted session once. Without flags, use private terminal email/password; non-TTY automation accepts separate stdin lines. |
+| `auth login` | Optional `--browser`, or `--complete [--wait]` | Start a private hosted login link (CLI 0.4.0+), enter a Settle Up Firebase key and email/password privately, then collect a browser-encrypted session once. Refresh goes directly to Firebase with the saved key. Without flags, use private terminal email/password; non-TTY automation accepts separate stdin lines. |
 | `auth status` | None | Report local session presence, selected `storage`, `uid`, email, expiry; does not confirm live access. |
 | `auth logout` | None | Delete the local session and cancel pending browser login. |
 | `users me` | None | Fetch the authenticated user's profile. |

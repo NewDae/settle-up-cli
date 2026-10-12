@@ -27,7 +27,7 @@ const sessionStore = createSessionStore({
 const browserLogin = createBrowserLogin({
   configDir: CONFIG_DIR, environment: ENVIRONMENT, apiBaseUrl: API_BASE_URL, authBaseUrl: AUTH_BASE_URL,
   loginBaseUrl: process.env.SETTLEUP_LOGIN_BASE_URL ||
-    (ENVIRONMENT === 'production' && !process.env.SETTLEUP_API_BASE_URL && !process.env.SETTLEUP_AUTH_BASE_URL && !FIREBASE_API_KEY
+    (ENVIRONMENT === 'production' && !process.env.SETTLEUP_API_BASE_URL && !process.env.SETTLEUP_AUTH_BASE_URL
       ? 'https://settleupcli.pages.dev' : ''),
 });
 const META = { environment: ENVIRONMENT };
@@ -237,19 +237,23 @@ async function signInWithFirebase(email, password) {
   };
 }
 
-async function refreshWithFirebase(refreshToken) {
+async function refreshWithFirebase(refreshToken, apiKey = FIREBASE_API_KEY) {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
-  const json = await fetchJson(
-    `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body,
-    }
-  );
+  let json;
+  try {
+    json = await fetchJson(
+      `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(apiKey)}`,
+      { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body }
+    );
+  } catch (error) {
+    throw Object.assign(new Error('Firebase session refresh failed'), {
+      cliCode: error.cliCode === 'API_RATE_LIMITED' ? 'API_RATE_LIMITED' : 'AUTH_REFRESH_FAILED',
+      details: { status: error.details?.status },
+    });
+  }
   return {
     accessToken: json.id_token,
     refreshToken: json.refresh_token,
@@ -259,8 +263,9 @@ async function refreshWithFirebase(refreshToken) {
 }
 
 async function refreshAuth(auth) {
-  const json = FIREBASE_API_KEY
-    ? await refreshWithFirebase(auth.refreshToken)
+  const apiKey = auth.firebaseApiKey || FIREBASE_API_KEY;
+  const json = apiKey
+    ? await refreshWithFirebase(auth.refreshToken, apiKey)
     : unwrapApiEnvelope(await fetchJson(authUrl('/auth/refresh'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1150,6 +1155,7 @@ async function main() {
           || typeof auth.refreshToken !== 'string' || !auth.refreshToken
           || typeof auth.uid !== 'string' || !auth.uid
           || typeof auth.email !== 'string' || !auth.email
+          || typeof auth.firebaseApiKey !== 'string' || !/^[A-Za-z0-9_-]{20,256}$/.test(auth.firebaseApiKey)
           || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= Date.now()) {
         browserLogin.finish();
         throw Object.assign(new Error('Browser login did not return a complete session; start again'), { cliCode: 'AUTH_INVALID' });

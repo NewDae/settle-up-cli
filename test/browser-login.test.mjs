@@ -25,15 +25,8 @@ function database() {
 }
 function harness() {
   const { db, sqlite } = database();
-  const requests = [];
-  let authResponse = session();
-  const env = { LOGIN_DB: db, AUTH_SERVICE: { async fetch(request) {
-    const input = await request.json();
-    requests.push({ path: new URL(request.url).pathname, method: request.method, input });
-    if (input.password !== 'test-password') return Response.json({ ok: false }, { status: 401 });
-    return Response.json({ ok: true, data: authResponse });
-  } } };
-  return { sqlite, env, requests, setSession(value) { authResponse = value; }, async call(action, body, { origin = 'https://login.test', method = 'POST', ip = '192.0.2.1' } = {}) {
+  const env = { LOGIN_DB: db };
+  return { sqlite, env, async call(action, body, { origin = 'https://login.test', method = 'POST', ip = '192.0.2.1' } = {}) {
     const response = await handleBrowserLogin(new Request(`https://login.test/api/login/${action}`, {
       method, headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}), 'cf-connecting-ip': ip },
       ...(method !== 'GET' ? { body: JSON.stringify(body) } : {}),
@@ -41,7 +34,7 @@ function harness() {
     return { status: response.status, body: await response.json(), headers: response.headers };
   } };
 }
-const session = () => ({ accessToken: 'private-access-token', refreshToken: 'private-refresh-token', uid: 'test-user', email: 'person@example.invalid', expiresAt: Date.now() + 3_600_000 });
+const session = () => ({ accessToken: 'private-access-token', refreshToken: 'private-refresh-token', uid: 'test-user', email: 'person@example.invalid', expiresAt: Date.now() + 3_600_000, firebaseApiKey: 'test-firebase-api-key-12345' });
 
 test('encrypted handoff binds the browser link and decrypts only with the originating CLI key', async () => {
   const keys = await createLoginKey();
@@ -58,27 +51,23 @@ test('encrypted handoff binds the browser link and decrypts only with the origin
 test('database holds ciphertext and hashed poll credential; completion and polling are one-use', async t => {
   const h = harness(); t.after(() => h.sqlite.close());
   const keys = await createLoginKey();
-  const started = await h.call('start', { publicKey: keys.publicKey }, { origin: null });
+  const started = await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 }, { origin: null });
   assert.equal(started.status, 200);
   assert.equal(started.headers.get('cache-control'), 'no-store');
   const { browserId, deviceToken } = started.body.data;
   const context = await h.call('context', { browserId });
   assert.equal(context.body.data.publicKey, keys.publicKey);
-  assert.deepEqual(Object.keys(context.body.data).sort(), ['expiresAt', 'publicKey']);
+  assert.deepEqual(Object.keys(context.body.data).sort(), ['expiresAt', 'protocolVersion', 'publicKey']);
   assert.equal((await h.call('poll', { deviceToken }, { origin: null })).body.data.status, 'pending');
   assert.equal((await h.call('poll', { deviceToken: browserId })).status, 410);
   const value = session();
-  h.setSession(value);
-  const credentials = { browserId, email: value.email, password: 'test-password' };
-  assert.equal((await h.call('complete', credentials)).status, 200);
-  assert.equal(h.requests.length, 1);
-  assert.equal(h.requests[0].path, '/auth/login');
-  assert.deepEqual(h.requests[0].input, { email: credentials.email, password: credentials.password });
+  const payload = { browserId, envelope: await encryptLogin(value, keys.publicKey, browserId) };
+  assert.equal((await h.call('complete', payload)).status, 200);
   const envelope = JSON.parse(h.sqlite.prepare('SELECT envelope FROM browser_logins').get().envelope);
   assert.deepEqual(await decryptLogin(envelope, keys.privateKey, browserId), value);
-  assert.equal((await h.call('complete', credentials)).status, 410);
+  assert.equal((await h.call('complete', payload)).status, 410);
   const stored = JSON.stringify(h.sqlite.prepare('SELECT * FROM browser_logins').all());
-  for (const secret of [deviceToken, 'private-access-token', 'private-refresh-token', 'person@example.invalid', 'test-password']) assert.ok(!stored.includes(secret));
+  for (const secret of [deviceToken, 'private-access-token', 'private-refresh-token', 'person@example.invalid', 'test-password', value.firebaseApiKey]) assert.ok(!stored.includes(secret));
   const results = await Promise.all([h.call('poll', { deviceToken }), h.call('poll', { deviceToken })]);
   assert.deepEqual(results.map(result => result.status).sort(), [200, 410]);
   assert.deepEqual(results.find(result => result.status === 200).body.data.envelope, envelope);
@@ -88,7 +77,7 @@ test('database holds ciphertext and hashed poll credential; completion and polli
 test('expiry, cancellation, rate limiting, and missing configuration fail safely', async t => {
   const h = harness(); t.after(() => h.sqlite.close());
   const keys = await createLoginKey();
-  const start = async () => (await h.call('start', { publicKey: keys.publicKey })).body.data;
+  const start = async () => (await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 })).body.data;
   const expired = await start();
   h.sqlite.prepare('UPDATE browser_logins SET expires_at = 0').run();
   assert.equal((await h.call('context', { browserId: expired.browserId })).status, 410);
@@ -96,8 +85,8 @@ test('expiry, cancellation, rate limiting, and missing configuration fail safely
   const cancelled = await start();
   assert.equal((await h.call('cancel', { deviceToken: cancelled.deviceToken })).status, 200);
   assert.equal((await h.call('context', { browserId: cancelled.browserId })).status, 410);
-  for (let i = 0; i < 8; i++) assert.equal((await h.call('start', { publicKey: keys.publicKey })).status, 200);
-  assert.equal((await h.call('start', { publicKey: keys.publicKey })).status, 429);
+  for (let i = 0; i < 8; i++) assert.equal((await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 })).status, 200);
+  assert.equal((await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 })).status, 429);
   const response = await handleBrowserLogin(new Request('https://login.test/api/login/start', { method: 'POST' }), {});
   assert.equal(response.status, 503);
 });
@@ -105,7 +94,7 @@ test('expiry, cancellation, rate limiting, and missing configuration fail safely
 test('reject cross-origin requests, credentials on pairing endpoints, missing browser origin, malformed keys, and oversized bodies', async t => {
   const h = harness(); t.after(() => h.sqlite.close());
   const keys = await createLoginKey();
-  assert.equal((await h.call('start', { publicKey: keys.publicKey }, { origin: 'https://attacker.test' })).status, 403);
+  assert.equal((await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 }, { origin: 'https://attacker.test' })).status, 403);
   assert.equal((await h.call('context', { browserId: 'a'.repeat(64) }, { origin: null })).status, 403);
   assert.equal((await h.call('start', { publicKey: keys.publicKey, password: 'never-accepted' })).status, 400);
   assert.equal((await h.call('start', { publicKey: 'invalid' })).status, 400);
@@ -113,24 +102,23 @@ test('reject cross-origin requests, credentials on pairing endpoints, missing br
   assert.equal((await h.call('start', {}, { method: 'GET' })).status, 405);
 });
 
-test('hosted auth failures expose no provider details, passwords, tokens, or API keys and allow retry', async t => {
+test('relay rejects credentials, invalid envelopes, and old protocols before storing anything', async t => {
   const h = harness(); t.after(() => h.sqlite.close());
   const keys = await createLoginKey();
-  const { browserId } = (await h.call('start', { publicKey: keys.publicKey })).body.data;
-  const invalid = await h.call('complete', { browserId, email: 'person@example.invalid', password: 'wrong-password' });
-  assert.equal(invalid.status, 401);
-  assert.equal(invalid.body.error.code, 'AUTH_INVALID');
-  assert.ok(!JSON.stringify(invalid.body).includes('wrong-password'));
-  assert.equal((await h.call('context', { browserId })).status, 200);
-  const service = h.env.AUTH_SERVICE;
-  for (const providerStatus of [429, 500]) {
-    h.env.AUTH_SERVICE = { fetch: async () => Response.json({ secret: 'provider-secret' }, { status: providerStatus }) };
-    const result = await h.call('complete', { browserId, email: 'person@example.invalid', password: 'test-password' });
-    assert.equal(result.status, providerStatus === 429 ? 429 : 503);
-    assert.ok(!JSON.stringify(result.body).includes('provider-secret'));
+  assert.equal((await h.call('start', { publicKey: keys.publicKey })).status, 400);
+  const { browserId } = (await h.call('start', { publicKey: keys.publicKey, protocolVersion: 2 })).body.data;
+  const payload = { browserId, envelope: await encryptLogin(session(), keys.publicKey, browserId) };
+  for (const extra of [{ password: 'never-relayed' }, { email: 'never@example.invalid' }, { apiKey: 'never-relayed' }, { accessToken: 'never-relayed' }]) {
+    const result = await h.call('complete', { ...payload, ...extra });
+    assert.equal(result.status, 400);
+    assert.ok(!JSON.stringify(result.body).includes('never-relayed'));
   }
-  h.env.AUTH_SERVICE = service;
-  assert.deepEqual((await h.call('complete', { browserId, email: 'person@example.invalid', password: 'test-password' })).body, { ok: true, data: { status: 'ready' } });
+  for (const envelope of [null, {}, { ...payload.envelope, password: 'never-relayed' }, { ...payload.envelope, iv: 'bad' }, { ...payload.envelope, ciphertext: 'bad' }, { ...payload.envelope, ciphertext: 'A'.repeat(12_292) }, { ...payload.envelope, publicKey: 'invalid' }]) {
+    assert.equal((await h.call('complete', { browserId, envelope })).status, 400);
+  }
+  assert.equal(h.sqlite.prepare('SELECT envelope FROM browser_logins').get().envelope, null);
+  assert.equal((await h.call('context', { browserId })).status, 200);
+  assert.deepEqual((await h.call('complete', payload)).body, { ok: true, data: { status: 'ready' } });
 });
 
 async function cliHarness(t) {
@@ -152,9 +140,10 @@ const original = globalThis.fetch;
 globalThis.fetch = async (url, options = {}) => {
   if (String(url).startsWith('${base}/')) return original(url, options);
   if (String(url).startsWith('https://db.test/users/test-user.json')) return Response.json({ name: 'Test user' });
-  if (String(url) === 'https://hosted.test/auth/refresh') {
-    if (JSON.parse(options.body).refreshToken !== 'private-refresh-token') throw new Error('Incorrect refresh body');
-    return Response.json({ ok: true, data: { accessToken: 'new-access-token', refreshToken: 'new-refresh-token', uid: 'test-user', expiresAt: Date.now() + 3600000 } });
+  if (String(url) === 'https://securetoken.googleapis.com/v1/token?key=test-firebase-api-key-12345') {
+    if (process.env.DIRECT_REFRESH_FAIL === '1') return Response.json({error:{message:'test-firebase-api-key-12345 private-refresh-token'}},{status:401});
+    if (new URLSearchParams(options.body).get('refresh_token') !== 'private-refresh-token') throw new Error('Incorrect refresh body');
+    return Response.json({ id_token: 'new-access-token', refresh_token: 'new-refresh-token', user_id: 'test-user', expires_in: '3600' });
   }
   throw new Error('Unexpected network request');
 };
@@ -179,12 +168,12 @@ globalThis.fetch = async (url, options = {}) => {
   } };
 }
 
-test('real CLI start, pending, encrypted completion, status, hosted Worker refresh, and logout', async t => {
+test('real CLI start, pending, encrypted completion, status, direct Firebase refresh, and logout', async t => {
   const h = await cliHarness(t);
   const started = await h.run(['auth', 'login', '--browser']);
   assert.equal(started.code, 0, started.stdout);
   assert.equal(started.output.data.status, 'pending');
-  const browserId = new URL(started.output.data.loginUrl).hash.slice(1);
+  const browserId = new URL(started.output.data.loginUrl).hash.slice(1).split('.')[0];
   const files = fs.readdirSync(path.join(h.config, 'test'));
   const pendingPath = path.join(h.config, 'test', files.find(name => name.startsWith('browser-login-')));
   const pending = JSON.parse(fs.readFileSync(pendingPath, 'utf8'));
@@ -198,16 +187,20 @@ test('real CLI start, pending, encrypted completion, status, hosted Worker refre
   const value = session();
   // Expiring soon forces the very next authenticated command to refresh.
   value.expiresAt = Date.now() + 50_000;
-  h.setSession(value);
-  assert.equal((await h.browser('complete', { browserId, email: value.email, password: 'test-password' })).status, 200);
+  assert.equal((await h.browser('complete', { browserId, envelope: await encryptLogin(value, context.publicKey, browserId) })).status, 200);
   const completed = await h.run(['auth', 'login', '--complete']);
   assert.equal(completed.code, 0, completed.stdout);
   assert.equal(completed.output.data.email, value.email);
   assert.ok(!completed.stdout.includes(value.accessToken));
   assert.ok(!completed.stdout.includes(value.refreshToken));
+  assert.ok(!completed.stdout.includes(value.firebaseApiKey));
   assert.equal(fs.existsSync(pendingPath), false);
   assert.equal((await h.run(['auth', 'status'])).output.data.authenticated, true);
-  assert.equal((await h.run(['users', 'me'])).code, 0);
+  const rejected = await h.run(['users', 'me'], { DIRECT_REFRESH_FAIL: '1' });
+  assert.equal(rejected.output.error.code, 'AUTH_REFRESH_FAILED');
+  assert.ok(!rejected.stdout.includes(value.firebaseApiKey));
+  assert.ok(!rejected.stdout.includes(value.refreshToken));
+  assert.equal((await h.run(['users', 'me'], { SETTLEUP_FIREBASE_API_KEY: 'different-firebase-key-67890' })).code, 0);
   const saved = fs.readdirSync(path.join(h.config, 'test')).find(name => name.startsWith('auth-'));
   assert.equal(JSON.parse(fs.readFileSync(path.join(h.config, 'test', saved))).accessToken, 'new-access-token');
   assert.equal((await h.run(['auth', 'logout'])).code, 0);
@@ -222,7 +215,7 @@ test('CLI blocks unsafe config and conflicting flags; logout cancels the browser
   assert.equal((await h.run(['auth', 'login', '--browser'], { SETTLEUP_LOGIN_BASE_URL: 'not-a-url' })).output.error.code, 'INVALID_INPUT');
   assert.equal((await h.run(['auth', 'login', '--browser'], { SETTLEUP_LOGIN_BASE_URL: '' })).output.error.code, 'INVALID_INPUT');
   const start = await h.run(['auth', 'login', '--browser']);
-  const browserId = new URL(start.output.data.loginUrl).hash.slice(1);
+  const browserId = new URL(start.output.data.loginUrl).hash.slice(1).split('.')[0];
   assert.equal((await h.run(['auth', 'logout'])).code, 0);
   assert.equal((await h.browser('context', { browserId })).status, 410);
   assert.deepEqual(fs.readdirSync(path.join(h.config, 'test')), []);

@@ -44,10 +44,12 @@ export function createSessionStore({
         || typeof value?.refreshToken !== 'string' || !value.refreshToken
         || typeof value?.uid !== 'string' || !value.uid
         || !Number.isFinite(value?.expiresAt)) throw new Error('Invalid stored session');
+    if (value.firebaseApiKey !== undefined && (typeof value.firebaseApiKey !== 'string' || !/^[A-Za-z0-9_-]{20,256}$/.test(value.firebaseApiKey))) throw new Error('Invalid stored Firebase key');
     // Persist only session fields, even if a legacy file has unrelated secrets.
     return {
       accessToken, refreshToken: value.refreshToken, uid: value.uid,
       ...(typeof value.email === 'string' ? { email: value.email } : {}), expiresAt: value.expiresAt,
+      ...(typeof value.firebaseApiKey === 'string' && /^[A-Za-z0-9_-]{20,256}$/.test(value.firebaseApiKey) ? { firebaseApiKey: value.firebaseApiKey } : {}),
     };
   }
 

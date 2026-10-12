@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+- Browser login now asks for a compatible Settle Up Firebase Web API key with email/password and sends them directly to Firebase. The browser encrypts tokens and the refresh key before sending them to the backend; Pages no longer calls or binds an auth Worker.
+- New browser sessions save the supplied key in the selected CLI credential store and refresh directly with Firebase. The password is never handed to the CLI or relay.
+- Protocol version 2 requires CLI 0.4.0+ and pins the encryption key to the original login-link fragment. Mixed website/client versions fail before verification. Existing terminal login and legacy-session refresh remain supported.
+- Update the login page, auth FAQ, agent instructions, self-hosting/deployment guidance, and tests for the encrypted-only backend.
+
 ## 0.3.0 (2026-10-12)
 
 ### Added

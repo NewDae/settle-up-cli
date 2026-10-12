@@ -19,6 +19,19 @@ for (const name of ['agent.md', 'llms.txt']) {
   }
 }
 
+// The browser uses the same encryption and Firebase sign-in code as the tests.
+for (const [sourceName, targetName] of [['browser-crypto.mjs', 'login-crypto.js'], ['firebase-browser-login.mjs', 'firebase-browser-login.js']]) {
+  const moduleSource = lf(await fs.readFile(new URL(`../bin/lib/${sourceName}`, import.meta.url), 'utf8'))
+    .replace("'./browser-crypto.mjs'", "'./login-crypto.js'");
+  const target = new URL(`../docs/${targetName}`, import.meta.url);
+  if (check) {
+    if (lf(await fs.readFile(target, 'utf8').catch(() => '')) !== moduleSource) {
+      console.error(`docs/${targetName} is stale. Run npm run docs:sync.`);
+      process.exitCode = 1;
+    }
+  } else await fs.writeFile(target, moduleSource);
+}
+
 const indexTarget = new URL('../docs/index.html', import.meta.url);
 const index = lf(await fs.readFile(indexTarget, 'utf8'));
 const escapeHtml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');

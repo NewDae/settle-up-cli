@@ -1,5 +1,4 @@
-import { encryptLogin } from '../bin/lib/browser-crypto.mjs';
-
+const PROTOCOL_VERSION = 2;
 const TTL = 10 * 60_000;
 const token = () => [...crypto.getRandomValues(new Uint8Array(32))].map(value => value.toString(16).padStart(2, '0')).join('');
 const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))].map(value => value.toString(16).padStart(2, '0')).join('');
@@ -33,8 +32,8 @@ async function body(request) {
   return value;
 }
 // A same-origin Pages Function. The database stores only ciphertext, public
-// keys, and hashed poll credentials. Password verification stays in the
-// existing auth Worker; no passwords or readable tokens are persisted here.
+// keys, and hashed poll credentials. Firebase verification and session
+// encryption happen in the browser; this service never receives credentials.
 export async function handleBrowserLogin(request, env) {
   const url = new URL(request.url);
   const action = url.pathname.split('/').pop();
@@ -43,16 +42,17 @@ export async function handleBrowserLogin(request, env) {
   const origin = request.headers.get('origin');
   if (origin && origin !== url.origin) return reject('Cross-origin login is not allowed', 403);
   if (['context', 'complete'].includes(action) && origin !== url.origin) return reject('Open the login page to continue', 403);
-  if (!env.LOGIN_DB || !env.AUTH_SERVICE) return reject('Browser login is not configured', 503, 'API_REQUEST_FAILED');
+  if (!env.LOGIN_DB) return reject('Browser login is not configured', 503, 'API_REQUEST_FAILED');
   let input;
   try { input = await body(request); } catch { return reject('Invalid login request'); }
-  const fields = { start: ['publicKey'], context: ['browserId'], complete: ['browserId', 'email', 'password'], poll: ['deviceToken'], cancel: ['deviceToken'] }[action];
+  const fields = { start: ['publicKey', 'protocolVersion'], context: ['browserId'], complete: ['browserId', 'envelope'], poll: ['deviceToken'], cancel: ['deviceToken'] }[action];
   if (Object.keys(input).some(key => !fields.includes(key))) return reject('Unexpected login field');
   const db = env.LOGIN_DB;
   const now = Date.now();
   try {
     await db.prepare('DELETE FROM browser_logins WHERE expires_at <= ?').bind(now).run();
     if (action === 'start') {
+      if (input.protocolVersion !== PROTOCOL_VERSION) return reject('Update settle-up-cli to 0.4.0 or newer to sign in', 400);
       if (!publicKey(input.publicKey)) return reject('Invalid login public key');
       try { await crypto.subtle.importKey('raw', Uint8Array.from(atob(input.publicKey), c => c.charCodeAt(0)), { name: 'ECDH', namedCurve: 'P-256' }, false, []); } catch { return reject('Invalid login public key'); }
       // A bounded, per-IP quota; no plaintext IPs are persisted.
@@ -64,30 +64,20 @@ export async function handleBrowserLogin(request, env) {
       const deviceToken = token();
       const expiresAt = now + TTL;
       await db.prepare('INSERT INTO browser_logins (browser_id, device_hash, public_key, expires_at) VALUES (?, ?, ?, ?)').bind(browserId, await hash(deviceToken), input.publicKey, expiresAt).run();
-      return json({ ok: true, data: { browserId, deviceToken, expiresAt, interval: 3 } });
+      return json({ ok: true, data: { browserId, deviceToken, expiresAt, interval: 3, protocolVersion: PROTOCOL_VERSION } });
     }
     if (['context', 'complete'].includes(action)) {
       if (!validToken(input.browserId)) return reject('Invalid login link');
       const row = await db.prepare('SELECT public_key, expires_at, envelope FROM browser_logins WHERE browser_id = ?').bind(input.browserId).first();
       if (!row || row.envelope) return reject('This login link has expired or was already used', 410, 'AUTH_INVALID');
-      if (action === 'context') return json({ ok: true, data: { publicKey: row.public_key, expiresAt: row.expires_at } });
-      if (typeof input.email !== 'string' || !input.email || input.email.length > 254 || typeof input.password !== 'string' || !input.password || input.password.length > 4096) return reject('Enter your email and password');
-      // Internal service binding to the existing hosted Worker. Its Firebase
-      // API key stays in that Worker's secret configuration.
-      let upstream;
-      try {
-        upstream = await env.AUTH_SERVICE.fetch(new Request('https://auth.internal/auth/login', {
-          method: 'POST', headers: { 'content-type': 'application/json', 'cf-connecting-ip': request.headers.get('cf-connecting-ip') || 'local' },
-          body: JSON.stringify({ email: input.email, password: input.password }), signal: AbortSignal.timeout(20_000),
-        }));
-      } finally { input.password = ''; }
-      if (upstream.status === 429) return reject('Too many attempts; wait before trying again', 429, 'API_RATE_LIMITED');
-      if ([400, 401, 403].includes(upstream.status)) return reject('Sign-in failed; check your email/password and account migration', 401, 'AUTH_INVALID');
-      if (!upstream.ok) return reject('Sign-in is temporarily unavailable', 503, 'API_REQUEST_FAILED');
-      const result = await upstream.json();
-      const auth = result?.ok === true ? result.data : null;
-      if (typeof auth?.accessToken !== 'string' || !auth.accessToken || typeof auth.refreshToken !== 'string' || !auth.refreshToken || typeof auth.uid !== 'string' || !auth.uid || typeof auth.email !== 'string' || !auth.email || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= Date.now()) return reject('Sign-in returned an incomplete session', 502, 'AUTH_INVALID');
-      const e = await encryptLogin({ accessToken: auth.accessToken, refreshToken: auth.refreshToken, uid: auth.uid, email: auth.email, expiresAt: auth.expiresAt }, row.public_key, input.browserId);
+      if (action === 'context') return json({ ok: true, data: { publicKey: row.public_key, expiresAt: row.expires_at, protocolVersion: PROTOCOL_VERSION } });
+      const e = input.envelope;
+      if (!e || typeof e !== 'object' || Array.isArray(e)
+          || Object.keys(e).some(key => !['publicKey', 'iv', 'ciphertext'].includes(key))
+          || !publicKey(e.publicKey) || typeof e.iv !== 'string' || !/^[A-Za-z0-9+/]{16}$/.test(e.iv)
+          || typeof e.ciphertext !== 'string' || e.ciphertext.length < 24 || e.ciphertext.length > 12_288
+          || e.ciphertext.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(e.ciphertext)) return reject('Invalid encrypted session');
+      try { await crypto.subtle.importKey('raw', Uint8Array.from(atob(e.publicKey), c => c.charCodeAt(0)), { name: 'ECDH', namedCurve: 'P-256' }, false, []); } catch { return reject('Invalid encrypted session'); }
       const saved = await db.prepare('UPDATE browser_logins SET envelope = ? WHERE browser_id = ? AND envelope IS NULL AND expires_at > ? RETURNING browser_id').bind(JSON.stringify(e), input.browserId, Date.now()).first();
       if (!saved) return reject('This login link has expired or was already used', 410, 'AUTH_INVALID');
       return json({ ok: true, data: { status: 'ready' } });

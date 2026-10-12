@@ -10,11 +10,13 @@ Requires **Node.js 22 or newer** and internet access.
 
 ```sh
 npm install -g settle-up-cli
-settleup auth login
+settleup auth login --browser
+# Open loginUrl privately and enter your Firebase API key, email, and password.
+settleup auth login --complete
 settleup groups list
 ```
 
-Sign in with your Settle Up email and password. The password is hidden while you type, and the CLI refreshes your session automatically. No API key, environment file, or backend setup is needed.
+Browser login requires CLI 0.4.0+ and a Firebase Web API key for the project that authenticates your Settle Up account. Your browser sends the key, email, and password directly to Firebase. The CLI receives an encrypted session and saves the key for direct refresh. A key from an unrelated Firebase project won’t work. For private terminal login, configure `SETTLEUP_FIREBASE_API_KEY` locally; terminal login without a key retains the legacy hosted-auth flow.
 
 Your session is kept in your operating system's credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service (GNOME Keyring or KWallet). Your password is never saved. On a server or container without a credential store, set `SETTLEUP_AUTH_STORAGE=file` to opt into a plaintext session file instead; see the [login reference](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#credential-storage).
 
@@ -24,9 +26,9 @@ Your session is kept in your operating system's credential store: macOS Keychain
 
 Visit the [landing page](https://settleupcli.pages.dev/), choose your agent, and copy its setup prompt into your conversation. The agent reads the [installation and everyday usage guide](https://settleupcli.pages.dev/agent.md), checks its tools, and helps you connect.
 
-The [hosted auth server source](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker) is open source alongside the CLI and website.
+The [encrypted session relay](https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs) and [direct Firebase browser login](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/firebase-browser-login.mjs) are open source alongside the CLI.
 
-Your agent needs terminal access. It runs `settleup auth login --browser` and gives you a private login link. Sign in on the hosted page, then the agent runs `settleup auth login --complete`. Your browser can be on a different computer from the CLI. The Firebase API key stays in the hosted auth Worker; your password is used for verification and is not saved. Never paste passwords or session tokens into chat. Only sign in through a link you just asked for, and check that the agent reports your email afterwards. See [how auth works](https://settleupcli.pages.dev/#auth) and the [security model](LOGIN.md#browser-login-security-model).
+Your agent needs terminal access. It runs `settleup auth login --browser` and gives you a private login link. Enter your Settle Up Firebase Web API key, email, and password on the hosted page (CLI 0.4.0+), then the agent runs `settleup auth login --complete`. Your browser can be on a different computer from the CLI. The browser verifies directly with Firebase and encrypts the session before our backend receives it. The CLI saves the key with its session for direct Firebase refresh; your password is never saved. Use a key for the Firebase project that authenticates your Settle Up account. Never paste keys, passwords, or session tokens into chat. Only sign in through a link you just asked for, and check that the agent reports your email afterwards. See [how auth works](https://settleupcli.pages.dev/#auth) and the [security model](LOGIN.md#browser-login-security-model).
 
 Try asking:
 

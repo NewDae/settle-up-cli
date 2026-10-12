@@ -1,4 +1,4 @@
-// Shared by the CLI and website backend. Private keys never leave the CLI.
+// Shared by the CLI and login browser. Private keys never leave the CLI.
 const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
 const unb64 = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
 export async function createLoginKey() {

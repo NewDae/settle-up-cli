@@ -49,8 +49,8 @@ export function createBrowserLogin({ configDir, environment, apiBaseUrl, authBas
       const base = baseUrl();
       if (read()) throw error('A browser login is already pending; run auth login --complete, or auth logout to cancel');
       const keys = await createLoginKey();
-      const result = await request(base, 'start', { publicKey: keys.publicKey });
-      if (!/^[a-f0-9]{64}$/.test(result?.browserId) || !/^[a-f0-9]{64}$/.test(result?.deviceToken)
+      const result = await request(base, 'start', { publicKey: keys.publicKey, protocolVersion: 2 });
+      if (result?.protocolVersion !== 2 || !/^[a-f0-9]{64}$/.test(result?.browserId) || !/^[a-f0-9]{64}$/.test(result?.deviceToken)
           || !Number.isFinite(result?.expiresAt) || result.expiresAt <= Date.now() || result.expiresAt > Date.now() + 11 * 60_000) throw error('Invalid browser login response', 'API_REQUEST_FAILED');
       fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
       if (process.platform !== 'win32') fs.chmodSync(directory, 0o700);
@@ -62,9 +62,9 @@ export function createBrowserLogin({ configDir, environment, apiBaseUrl, authBas
         throw error('Could not save pending browser login; check the CLI config directory', 'AUTH_STORAGE_FAILED');
       }
       return {
-        status: 'pending', loginUrl: `${base}/login#${result.browserId}`,
+        status: 'pending', loginUrl: `${base}/login#${result.browserId}.${encodeURIComponent(keys.publicKey)}`,
         expiresAt: result.expiresAt,
-        next: 'Open loginUrl privately and sign in, then run settleup auth login --complete. Never send passwords or tokens in chat.',
+        next: 'Open loginUrl privately and enter your Settle Up Firebase API key, email, and password, then run settleup auth login --complete. Never send API keys, passwords, or tokens in chat.',
       };
     },
     async complete({ wait = false } = {}) {

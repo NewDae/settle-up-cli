@@ -2,7 +2,6 @@
   "name": "settleupcli",
   "pages_build_output_dir": "./docs",
   "compatibility_date": "2026-05-28",
-  "services": [{ "binding": "AUTH_SERVICE", "service": "settleup-production" }],
   "d1_databases": [{
     "binding": "LOGIN_DB",
     "database_name": "settleup-browser-login",
@@ -10,10 +9,9 @@
     "migrations_dir": "migrations"
   }],
   // Preview deployments run unreviewed branches on public URLs. They must never
-  // receive production passwords or write to the production handoff database.
+  // write to the production handoff database. Credentials go directly to Firebase.
   "env": {
     "preview": {
-      "services": [{ "binding": "AUTH_SERVICE", "service": "settleup-staging" }],
       "d1_databases": [{
         "binding": "LOGIN_DB",
         "database_name": "settleup-browser-login-staging",
