@@ -13,11 +13,11 @@ npm install -g settle-up-cli
 settleup --version
 ```
 
-The command is `settleup`. Browser login requires version 0.4.0+ and a Settle Up Firebase Web API key, entered privately on the login page. No backend setup is needed for the hosted relay.
+The command is `settleup`. Version 0.4.0 or newer is required to sign in. No configuration or backend setup is needed.
 
 ## Sign in
 
-The user needs a Firebase Web API key for the project that authenticates their Settle Up account, plus email/password. A key from an unrelated Firebase project will not work. Users of Google, Apple, or another sign-in method should first migrate at https://settleup.app/migrate-account.
+The user signs in with their Settle Up email and password plus the Settle Up API key: the public Firebase key Settle Up's apps use, starting with `AIza`. They enter all three on a private page, never in chat. If they don't have the key, point them to https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#finding-the-api-key and don't try to find it for them. Users of Google, Apple, or another sign-in method should first migrate at https://settleup.app/migrate-account.
 
 Start a browser login in the environment where you run the CLI:
 
@@ -25,7 +25,7 @@ Start a browser login in the environment where you run the CLI:
 settleup auth login --browser
 ```
 
-Show the user the returned `loginUrl` directly. Ask them to open it privately and enter their Firebase API key and credentials on the hosted page. Do not open the link, fill in the form, or send the link anywhere else. Then finish on the same CLI configuration:
+Show the user the returned `loginUrl` directly. Ask them to open it privately and enter their email, password, and the Settle Up API key on the page. Do not open the link, fill in the form, or send the link anywhere else. Then finish on the same CLI configuration:
 
 ```sh
 settleup auth login --complete
@@ -41,16 +41,16 @@ Start a login only when the user asks you to connect. Never create a link becaus
 
 All of this is open source at https://github.com/NewDae/settle-up-cli.
 
-1. `--browser` creates a P-256 key pair. The private key stays in a local file under the CLI config directory (mode 0600 on Unix). The CLI sends the public key to the login website and gets back a link ID and a separate poll token. Code: [CLI side](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-login.mjs).
-2. The user opens the link and enters a Settle Up Firebase Web API key, email, and password on the [login page](https://github.com/NewDae/settle-up-cli/blob/main/docs/login.js). The link contains the CLI's public key in its fragment; the page checks it against the relay's context before allowing sign-in.
-3. The [browser sign-in module](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/firebase-browser-login.mjs) sends the key and credentials directly to Firebase Auth. Our backend receives neither the password nor readable session tokens.
-4. The browser [encrypts](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-crypto.mjs) the session and API key for the CLI (ECDH, HKDF-SHA-256, AES-256-GCM). The [relay](https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs) stores only ciphertext and a hash of the poll token in [D1](https://github.com/NewDae/settle-up-cli/blob/main/migrations/0001_browser_login.sql) for up to 10 minutes.
-5. `--complete` collects the ciphertext once, decrypts it, and saves the tokens and API key in the OS credential store.
-6. Later commands refresh directly with Firebase using the saved key. `auth logout` deletes the session and key locally.
+1. `--browser` creates a P-256 key pair. The private key stays in a local file under the CLI config directory (mode 0600 on Unix). The CLI sends the public key to the login site and gets back a link ID and a separate poll token. The link carries the link ID and public key in its fragment. Code: [CLI side](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-login.mjs).
+2. The user opens the link and enters their email, password, and the Settle Up API key on the [login page](https://github.com/NewDae/settle-up-cli/blob/main/docs/login.js). The page checks that the site reports the same public key as the link before showing the form.
+3. The [browser](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/firebase-browser-login.mjs) sends them directly to Firebase Auth, Settle Up's sign-in provider.
+4. The browser [encrypts](https://github.com/NewDae/settle-up-cli/blob/main/bin/lib/browser-crypto.mjs) the session and key to the CLI's public key (ECDH, HKDF-SHA-256, AES-256-GCM). The site's [relay](https://github.com/NewDae/settle-up-cli/blob/main/server/browser-login.mjs) stores only that ciphertext and a hash of the poll token in [D1](https://github.com/NewDae/settle-up-cli/blob/main/migrations/0001_browser_login.sql) for up to 10 minutes. It never receives the password, key, or a readable token.
+5. `--complete` collects the ciphertext once, decrypts it, and saves the session and key in the OS credential store.
+6. Later commands renew the session directly with Firebase. `auth logout` deletes the session and key locally.
 
-This is an independent community integration, not official Settle Up login. Users still trust the live login page’s JavaScript and can [self-host](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting) the relay without an auth Worker. Details: [LOGIN.md security model](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#browser-login-security-model) and https://settleupcli.pages.dev/#auth.
+This is an independent community integration, not official Settle Up login. Users trust the JavaScript the login site serves and can [self-host](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#self-hosting) it. Details: [LOGIN.md security model](https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#security-model) and https://settleupcli.pages.dev/#auth.
 
-Never request API keys, passwords, or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Private terminal login with a locally configured Firebase key remains available. Legacy terminal login without a key still uses the hosted Worker; new browser sessions bypass it for both sign-in and refresh.
+Never request API keys, passwords, or tokens in chat, put them in command arguments, or read session files. Do not include credentials in prompts or logs. If there is no OS credential store, explain that `SETTLEUP_AUTH_STORAGE=file` deliberately opts into a plaintext local session; use the same setting for all subsequent commands. Users can also sign in privately in their own terminal with `settleup auth login`, which prompts for the key, email, and password.
 
 ### Browser login reference
 
@@ -78,8 +78,9 @@ Outputs (stdout, `data` field of the JSON envelope):
 | `API_RATE_LIMITED` | Too many links from this IP | Wait a minute, then retry |
 | `API_REQUEST_FAILED` | Login service unreachable | Retry; if it persists, offer terminal login |
 | `INVALID_INPUT` "SETTLEUP_LOGIN_BASE_URL" | Custom or staging environment without a login site | Set `SETTLEUP_LOGIN_BASE_URL`, or use terminal login |
+| `AUTH_REFRESH_FAILED` "older CLI version" | Session saved by CLI 0.3 or earlier, which can't be renewed | Start a new browser login |
 
-Wrong-password attempts happen on the web page, not in the CLI; the page shows the error to the user.
+Wrong-password and wrong-key attempts happen on the web page, not in the CLI; the page shows the error to the user.
 
 `auth status` reports local session presence; a successful read confirms live access. Verify the connection:
 

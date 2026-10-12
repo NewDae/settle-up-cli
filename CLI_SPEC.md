@@ -13,7 +13,7 @@ Related references: [backend mapping](API_REFERENCE.md), [authentication](LOGIN.
 - Updates affect supplied fields only. Omitted fields remain unchanged; supplied nested arrays and objects are complete field replacements.
 - Monetary amounts and weights are decimal strings, not floating-point JSON numbers.
 - Account identity and group membership stay distinct.
-- No bundled user passwords, session tokens, or production Firebase API keys. Production database and hosted-auth URLs are packaged defaults; staging/local overrides remain supported.
+- No bundled user passwords, session tokens, or production Firebase API keys. The production database and login-site URLs are packaged defaults; users supply the Settle Up API key at sign-in. Staging/local overrides remain supported.
 - Validate inputs before writes where practical. Backend reads for exact-ID member validation are permitted; fuzzy resolution is not.
 - Keep server behavior observable and verify writes in staging. Structural validity cannot establish that the agent chose the correct people, amount, or group.
 
@@ -82,7 +82,7 @@ The executable is `settleup`. Write JSON is supplied with `--input <path>` or `-
 
 | Command | Required flags / input | Behavior |
 |---|---|---|
-| `auth login` | Optional `--browser`, or `--complete [--wait]` | Start a private hosted login link (CLI 0.4.0+), enter a Settle Up Firebase key and email/password privately, then collect a browser-encrypted session once. Refresh goes directly to Firebase with the saved key. Without flags, use private terminal email/password; non-TTY automation accepts separate stdin lines. |
+| `auth login` | Optional `--browser`, or `--complete [--wait]` | Start a private login link where the user enters their email, password, and Settle Up API key, then collect the browser-encrypted session once. Without flags, prompt privately in the terminal for the key (unless `SETTLEUP_FIREBASE_API_KEY` is set), email, and password. Non-TTY automation requires `SETTLEUP_FIREBASE_API_KEY` and reads email and password from separate stdin lines. Sign-in and refresh go directly to Firebase; the key is saved with the session. |
 | `auth status` | None | Report local session presence, selected `storage`, `uid`, email, expiry; does not confirm live access. |
 | `auth logout` | None | Delete the local session and cancel pending browser login. |
 | `users me` | None | Fetch the authenticated user's profile. |
@@ -434,7 +434,7 @@ Authentication can refresh before payload validation. The guarantee is validatio
 
 | Risk | Guidance |
 |---|---|
-| Public project configuration increases endpoint exposure | Keep Firebase keys and user credentials out of the package. Production URLs are public defaults; backend access rules and hosted auth remain essential. |
+| Public project configuration increases endpoint exposure | Keep Firebase keys and user credentials out of the package. Users supply the Settle Up API key at sign-in. Production URLs are public defaults; backend access rules remain essential. |
 | Nested edits can unintentionally remove entries | Read first and supply complete replacement arrays/maps. Partial patches protect omitted fields, not entries inside supplied fields. |
 | Client-side filtering costs bandwidth/time on large groups | Make the full-group fetch explicit; add optimization only when needed. |
 | Date-only ranges vary by timezone | Document local-day bounds; use epoch milliseconds when exact bounds matter. |
@@ -453,8 +453,8 @@ The original design principles remain the basis of the CLI. This table preserves
 | Earlier statement / requirement | Current status |
 |---|---|
 | No hidden lookup before writes | Exact-ID member validation performs a backend read before transaction writes; group creation reads its permission-created stub. No fuzzy name lookup is added. |
-| Interactive login only | Browser login (`auth login --browser` / `--complete`) is the recommended agent workflow: the user signs in on a hosted page, and the CLI collects an encrypted session. Private terminal sign-in remains for people at a terminal. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
-| Do not bundle project configuration; require runtime config | Published package bundles production database/hosted-auth URLs for zero-config use, but no Firebase key or user/session secrets. Environment overrides remain available. |
+| Interactive login only | Browser login (`auth login --browser` / `--complete`) is the recommended agent workflow: the user signs in on a private page, and the CLI collects an encrypted session. Private terminal sign-in remains for people at a terminal. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
+| Do not bundle project configuration; require runtime config | Published package bundles production database and login-site URLs, but no Firebase key or user/session secrets; users enter the Settle Up API key at sign-in. Environment overrides remain available. |
 | Prefer OS keychain, with restricted-file fallback | Implemented: OS credential store by default; plaintext requires explicit `SETTLEUP_AUTH_STORAGE=file`. Sessions are isolated by config directory, environment, and endpoints, with verified legacy migration and storage-specific recovery; details in [LOGIN.md](LOGIN.md#credential-storage). |
 | Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |
 | Every write command and validation error directs callers to schema help | Implemented for input-taking write validation. Flag-only deletion/recalculation points to command help; auth, configuration, permissions, and service errors give relevant recovery guidance. |

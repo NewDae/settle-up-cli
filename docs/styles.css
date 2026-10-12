@@ -111,6 +111,7 @@ textarea { width:100%; padding:12px; font:13px/1.6 ui-monospace,monospace; borde
 .migration h2 { font-size:20px; }
 .migration p:not(.eyebrow) { font-size:13px; margin:8px 0 11px; color:var(--muted); }
 .text-link { font-size:13px; font-weight:550; }
+.text-link + .text-link { margin-left:16px; }
 .migration-art { width:116px; height:105px; flex-shrink:0; background:#ede7db; border-radius:10px; display:grid; place-items:center; position:relative; }
 .login-card { background:#fffefa; width:68px; height:61px; border:1px solid #dfd6c7; border-radius:6px; color:#a08b6f; font-size:21px; padding:7px 10px; line-height:1.1; transform:rotate(-6deg); }
 .login-card span { display:block; color:#a5a899; font-size:14px; letter-spacing:1px; border-top:1px solid #e6e3dc; margin-top:5px; padding-top:4px; }
