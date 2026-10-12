@@ -2,14 +2,14 @@
 
 The auth server, CLI, and browser-login website are maintained together in this repository under its [MIT license](../../LICENSE). The Worker stays a separate Cloudflare deployment; moving its source does not change its endpoints or expose its runtime secrets.
 
-`src/index.mjs` and `wrangler.toml` were imported without behavior or deployment-identity changes from the former auth repository at commit `3811c502cde8d5b032e996da5895c7915a80d1c5`. Make future auth-server changes here.
+`src/index.mjs` and `wrangler.toml` were imported from the former auth repository at commit `3811c502cde8d5b032e996da5895c7915a80d1c5`, with deployment identities unchanged. The one behavior change since import: error responses no longer include upstream Firebase error codes (for example `EMAIL_NOT_FOUND`), which allowed account enumeration. Make future auth-server changes here.
 
 ## What runs here
 
 - `POST /auth/login` verifies email/password with Firebase and returns a session.
 - `POST /auth/refresh` exchanges a refresh token for a refreshed session.
-- Validation, an 8 KB request limit, stable errors, `Cache-Control: no-store`, and a shared per-IP auth rate limit.
-- No database proxy, signup, password persistence, or credential logging. Browser access remains closed by default; the website calls this Worker through its internal `AUTH_SERVICE` binding.
+- Validation, an 8 KB request limit, stable errors that do not reveal whether an account exists, `Cache-Control: no-store`, and a shared per-IP auth rate limit.
+- No database proxy, signup, password persistence, or credential logging. The CLI calls these endpoints directly; the website calls them through its internal `AUTH_SERVICE` binding. No CORS headers are sent, so other websites cannot call the Worker from a browser.
 
 Existing deployment identities are retained:
 
@@ -43,8 +43,8 @@ SETTLEUP_FIREBASE_API_KEY=<sandbox Firebase Web API key>
 
 Use sandbox configuration locally. Worker dev starts from this directory, so it does not load the CLI's root environment files. Run the website separately with `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`; see [DEVELOPMENT.md](../../DEVELOPMENT.md#browser-login-website).
 
-## Publication and trust
+## Publication and self-hosting
 
-Worker source/configuration are public for inspection and self-hosting. Real `.env` and `.dev.vars` files stay ignored. The npm package includes only its existing client allowlist, and the website serves only `docs/`; Worker source is not shipped as a browser asset or installed CLI module.
+Worker source and configuration are public, so you can read them or deploy your own copy. See [self-hosting](../../LOGIN.md#self-hosting). Real `.env` and `.dev.vars` files stay ignored. The npm package includes only its existing client allowlist, and the website serves only `docs/`; Worker source is not shipped as a browser asset or installed CLI module.
 
-Public source makes the credential-handling implementation reviewable. Users still trust whoever operates the hosted deployment: code with Worker deployment permission can access runtime secrets, and source publication cannot prove that a particular live deployment matches the repository. Protect deployment access, review changes, and keep credentials out of logs.
+Operators: limit who has Worker deployment permission, since it grants access to runtime secrets. Review changes before deploying, and keep credentials out of logs.

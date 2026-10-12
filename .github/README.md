@@ -44,13 +44,17 @@ The full requirements, identity model, patch semantics and open questions are in
         │                         └─ bin/lib/session-store.mjs ── OS credential store
         │                                                          (or explicit file)
         ├──► auth service     login / refresh  (hosted wrapper or Firebase)
+        ├──► login website    browser login: start / poll / cancel  (Pages Functions + D1)
         └──► Settle Up database   REST paths, ?auth=<accessToken>
+
+ user's browser ──► login website /login ──► auth Worker (service binding) ──► Firebase
+                         └─ session encrypted to the CLI's key, held once in D1 for the CLI to poll
 ```
 
 - **One executable.** `bin/settleup.mjs` holds the command table (`HELP`), input schemas (`SCHEMAS`), validators, request helpers and error recovery. It has no runtime dependencies apart from the keyring module.
 - **The session store** (`bin/lib/session-store.mjs`) handles session read, write, migration and deletion. Each session is scoped by config directory, environment, database URL and auth URL.
 - **Environments.** `production` uses packaged defaults. `staging` and local setups need explicit URLs. See [LOGIN.md](../LOGIN.md#configuration-reference).
-- **The hosted auth Worker** lives in [`server/auth-worker/`](../server/auth-worker/README.md). The server, browser-login page, and CLI are all open source in this repository; runtime secrets remain in Cloudflare. Public source helps review credential handling but does not establish what code a hosted deployment is running.
+- **The hosted auth Worker** lives in [`server/auth-worker/`](../server/auth-worker/README.md). The server, browser-login page, and CLI are all open source in this repository and run on Cloudflare; runtime secrets remain in Cloudflare. Anyone can self-host them (see [LOGIN.md](../LOGIN.md#self-hosting)).
 - **The backend mapping** from each command to its endpoint is in [API_REFERENCE.md](../API_REFERENCE.md).
 
 ## Developing

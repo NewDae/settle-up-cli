@@ -2,13 +2,21 @@
 
 ## 0.3.0 (unreleased)
 
-- Simplify browser sign-in to email/password through the private CLI link, with no code confirmation. Add an auth diagram and FAQ to the landing page, and use matching navigation and footers on both pages.
-- Consolidate the existing hosted auth Worker source, deployment configuration, and tests into `server/auth-worker/` in the public CLI repository. Existing Worker identities and Cloudflare secrets are retained.
+### Added
 
-- Add `auth login --browser` and `auth login --complete [--wait]` so users can sign in privately on a hosted page while an agent runs the CLI on another computer.
-- Reuse the existing hosted auth Worker for password verification and session refresh; the integration's Firebase API key stays in that Worker.
-- Add a same-origin login page, Pages Functions, and a D1 migration for an encrypted, 10-minute, one-time session handoff. Neither passwords nor readable sessions are stored in the handoff database or returned to the browser.
-- Cancel pending browser login on logout and update agent setup guidance. Private terminal login remains available.
+- `auth login --browser` and `auth login --complete [--wait]`. The CLI returns a private login link; the user signs in on the hosted page, from any device, while an agent runs the CLI elsewhere. `auth logout` also cancels a pending link.
+- A same-origin login page, Pages Functions, and a D1 migration for the handoff. The session is encrypted to the CLI's key (ECDH P-256, HKDF-SHA-256, AES-256-GCM), collected once, and expires after 10 minutes. Neither passwords nor readable sessions are stored or returned to the browser.
+- The hosted auth Worker source, deployment configuration, and tests in `server/auth-worker/`. Existing Worker deployments and Cloudflare secrets are unchanged.
+- Self-hosting instructions, a browser login security model, and a sequence diagram in `LOGIN.md`. API_REFERENCE.md lists the browser login endpoints.
+- Agent guide: a step-by-step "How login works" with links to the source, output shapes, the one-pending-login rule, `--wait` and tool timeouts, and browser login errors with next steps.
+
+### Changed
+
+- The landing page leads with "Get started" (to the agent prompts) and "Star on GitHub". A "How auth works" section explains the flow, guarantees, where it runs, and FAQs. The agent prompt uses browser login, tells the agent not to open the link itself, and asks it to report the connected email.
+- Agents start login only at the user's request and confirm the connected email with them.
+- The auth Worker no longer returns upstream Firebase error codes, which could reveal whether an email has an account.
+- Pages preview deployments bind the staging auth Worker and a separate D1 database.
+- `auth login --help` shows the browser flow.
 
 ## 0.2.0
 

@@ -661,12 +661,12 @@ const HELP = {
     auth: {
       login: {
         synopsis: 'settleup auth login [--browser | --complete [--wait]]',
-        purpose: 'Authenticate user and store the session in the OS credential store (or explicit file storage).',
+        purpose: 'Authenticate user and store the session in the OS credential store (or explicit file storage). Agents: use --browser, show the user loginUrl, then --complete after they sign in.',
         operation: 'authenticates',
         requiredFlags: [],
         optionalFlags: ['--browser (create a private browser login link)', '--complete (retrieve the encrypted session)', '--wait (with --complete, poll until signed in or expired)'],
         identifiers: ['uid in output'],
-        example: 'settleup auth login',
+        example: 'settleup auth login --browser',
       },
       status: {
         synopsis: 'settleup auth status',
