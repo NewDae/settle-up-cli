@@ -47,7 +47,41 @@ test('Firebase failures and malformed success responses do not expose provider d
   for (const value of [null, {}, { ...providerSession(), refreshToken: '' }, { ...providerSession(), expiresIn: '-1' }, { ...providerSession(), expiresIn: 'Infinity' }]) {
     await assert.rejects(createFirebaseHandoff(input, async () => Response.json(value)), /incomplete session/);
   }
-  await assert.rejects(createFirebaseHandoff({ ...input, apiKey: '' }, async () => { throw new Error('Must not send'); }), /Enter your Settle Up/);
+  await assert.rejects(createFirebaseHandoff({ ...input, apiKey: '' }, async () => { throw new Error('Must not send'); }), /Enter the complete Firebase Web API key/);
+});
+
+test('Firebase error categories explain the problem and next step without displaying raw provider text', async () => {
+  const keys = await createLoginKey();
+  const input = { apiKey, email, password, publicKey: keys.publicKey, browserId };
+  const cases = [
+    ['API_KEY_INVALID', 400, /rejected this API key.*Copy the complete/s, 'api-key'],
+    ['INVALID_API_KEY', 400, /rejected this API key/, 'api-key'],
+    ['API_KEY_SERVICE_BLOCKED', 403, /does not allow.*Ask the key owner/s, 'api-key'],
+    ['API_KEY_HTTP_REFERRER_BLOCKED', 403, /restrictions block.*browser-compatible key/s, 'api-key'],
+    ['OPERATION_NOT_ALLOWED', 400, /Email\/password sign-in is disabled.*key owner/s, 'api-key'],
+    ['CONFIGURATION_NOT_FOUND', 400, /not configured or enabled.*key owner/s, 'api-key'],
+    ['INVALID_EMAIL', 400, /email address is not valid.*Enter your Settle Up/s, 'email'],
+    ['USER_DISABLED', 400, /account is disabled.*contact Settle Up support/s, undefined],
+    ['TOO_MANY_ATTEMPTS_TRY_LATER', 400, /temporarily limited.*Wait before retrying/s, undefined],
+  ];
+  for (const [code, status, expected, field] of cases) {
+    for (const error of [{ message: `${code} : ${password}` }, { message: password, details: [{ reason: code, metadata: { key: apiKey } }] }]) {
+      await assert.rejects(createFirebaseHandoff(input, async () => Response.json({ error }, { status })), failure => {
+        assert.match(failure.message, expected);
+        assert.equal(failure.field, field);
+        assert.ok(!failure.message.includes(apiKey)); assert.ok(!failure.message.includes(password));
+        return true;
+      });
+    }
+  }
+  const accountMessages = [];
+  for (const code of ['INVALID_LOGIN_CREDENTIALS', 'EMAIL_NOT_FOUND', 'INVALID_PASSWORD']) {
+    await assert.rejects(createFirebaseHandoff(input, async () => Response.json({ error: { message: code } }, { status: 400 })), failure => {
+      assert.match(failure.message, /did not accept this email\/password.*Re-enter.*auth project/s);
+      assert.equal(failure.field, 'credentials'); accountMessages.push(failure.message); return true;
+    });
+  }
+  assert.equal(new Set(accountMessages).size, 1);
 });
 
 test('actual login-page controller sends credentials to Firebase and only ciphertext to its backend', async () => {
@@ -56,13 +90,14 @@ test('actual login-page controller sends credentials to Firebase and only cipher
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { value: '', hidden: true, dataset: {}, textContent: '', disabled: false,
-      addEventListener(name, handler) { this[name] = handler; }, setAttribute(name) { this[name] = true; } });
+      addEventListener(name, handler) { this[name] = handler; }, setAttribute(name, value) { this[name] = value; }, removeAttribute(name) { delete this[name]; }, focus() { this.focused = true; } });
     return elements.get(id);
   };
+  let rejectKey = true;
   const fetchImpl = async (url, options) => {
     calls.push({ url, data: JSON.parse(options.body) });
     if (url === '/api/login/context') return Response.json({ ok: true, data: { publicKey: keys.publicKey, expiresAt: Date.now() + 600_000, protocolVersion: 2 } });
-    if (url.startsWith('https://identitytoolkit.googleapis.com/')) return Response.json(providerSession());
+    if (url.startsWith('https://identitytoolkit.googleapis.com/')) return rejectKey ? Response.json({error:{details:[{reason:'API_KEY_INVALID'}]}},{status:400}) : Response.json(providerSession());
     if (url === '/api/login/complete') return Response.json({ ok: true, data: { status: 'ready' } });
     throw new Error('Unexpected destination');
   };
@@ -76,7 +111,15 @@ test('actual login-page controller sends credentials to Firebase and only cipher
   assert.equal(element('login-form').hidden, false);
   element('api-key').value = apiKey; element('email').value = email; element('password').value = password;
   await element('login-form').submit({ preventDefault() {} });
-  assert.deepEqual(calls.map(call => call.url), ['/api/login/context', `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, '/api/login/complete']);
+  assert.match(element('status').textContent, /Firebase rejected this API key/);
+  assert.equal(element('api-key')['aria-invalid'], 'true');
+  assert.equal(element('api-key').focused, true);
+  assert.equal(element('password').value, '');
+  assert.ok(!calls.some(call => call.url === '/api/login/complete'));
+  rejectKey = false; element('password').value = password;
+  await element('login-form').submit({ preventDefault() {} });
+  assert.equal(element('api-key')['aria-invalid'], undefined);
+  assert.deepEqual(calls.map(call => call.url), ['/api/login/context', `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, '/api/login/complete']);
   const handoff = calls.at(-1).data;
   assert.deepEqual(Object.keys(handoff).sort(), ['browserId', 'envelope']);
   for (const secret of [apiKey, email, password, 'private-access-token', 'private-refresh-token']) assert.ok(!JSON.stringify(handoff).includes(secret));

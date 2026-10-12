@@ -2,6 +2,8 @@
 
 ## 0.4.0 (unreleased)
 
+- Show actionable Firebase sign-in errors for invalid/restricted keys, account sign-in, disabled providers/accounts, quotas, and outages. Highlight the affected fields while keeping unknown-email and wrong-password messages identical.
+
 - Browser login now asks for a compatible Settle Up Firebase Web API key with email/password and sends them directly to Firebase. The browser encrypts tokens and the refresh key before sending them to the backend; Pages no longer calls or binds an auth Worker.
 - New browser sessions save the supplied key in the selected CLI credential store and refresh directly with Firebase. The password is never handed to the CLI or relay.
 - Protocol version 2 requires CLI 0.4.0+ and pins the encryption key to the original login-link fragment. Mixed website/client versions fail before verification. Existing terminal login and legacy-session refresh remain supported.

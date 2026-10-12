@@ -8,6 +8,7 @@
 .login-main label { display:block; font-size:13px; font-weight:550; margin:18px 0 8px; }
 .login-main input { display:block; width:100%; border:1px solid var(--line); border-radius:6px; background:#fffefa; padding:12px; font:inherit; font-size:16px; line-height:1.4; color:var(--ink); }
 .login-main input:focus-visible { outline:2px solid #598968; outline-offset:2px; }
+.login-main input[aria-invalid="true"] { border-color:#9b392b; }
 #sign-in { width:100%; margin-top:24px; font-size:14px; padding:12px; }
 #sign-in:disabled { opacity:.6; cursor:wait; }
 .login-warning { font-size:13px; line-height:1.6; color:var(--ink); margin:0 0 6px; padding:12px 14px; border-left:3px solid #c08a3e; background:#fbf3e4; border-radius:0 6px 6px 0; }

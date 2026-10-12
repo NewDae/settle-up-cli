@@ -50,7 +50,7 @@ The key must allow Firebase Authentication sign-in and token refresh from the CL
 | Interception or tampering | P-256 ECDH, HKDF-SHA-256, and AES-256-GCM bind the ciphertext to the link ID. Collection is an atomic one-time delete. |
 | Link phishing or someone signs in the wrong account | Only use a link you just asked your agent/CLI to create. Whoever created it gets that session. Confirm the email reported by the CLI. |
 | Cross-site requests | Browser endpoints require same-origin `Origin`. CSP permits connections only to the site and Firebase's exact sign-in host, with no third-party scripts, framing, or referrers. |
-| Abuse | Link creation retains its per-IP quota; Firebase controls sign-in/refresh rate limits and API-key restrictions. Our relay no longer handles or rate-limits password verification. Provider errors shown on the page are generic. |
+| Abuse | Link creation retains its per-IP quota; Firebase controls sign-in/refresh rate limits and API-key restrictions. Our relay no longer handles or rate-limits password verification. Known Firebase error codes select fixed messages with a next step and highlight the affected field. Unknown email and wrong-password errors share one message; raw provider responses are never displayed. |
 | Public previews | Preview deployments use a separate handoff database. They have no auth Worker binding or server-side Firebase key. |
 | Older clients/servers | Protocol version 2 requires CLI 0.4.0+. Mixed versions fail before signing in instead of silently falling back to hosted auth. |
 

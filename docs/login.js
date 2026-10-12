@@ -48,6 +48,7 @@ async function initialize() {
 byId('login-form').addEventListener('submit', async event => {
   event.preventDefault();
   if (!context || Date.now() >= context.expiresAt) return;
+  for (const id of ['api-key', 'email', 'password']) byId(id).removeAttribute('aria-invalid');
   byId('sign-in').disabled = true;
   status('Signing in…');
   const credentials = { apiKey: byId('api-key').value.trim(), email: byId('email').value.trim(), password: byId('password').value, publicKey: cliPublicKey, browserId };
@@ -62,6 +63,9 @@ byId('login-form').addEventListener('submit', async event => {
     byId('migration-note')?.setAttribute('hidden', '');
   } catch (error) {
     status(error.message || 'Could not connect. Please try again.', true);
+    const fields = error.field === 'credentials' ? ['email', 'password'] : ['api-key', 'email', 'password'].includes(error.field) ? [error.field] : [];
+    for (const id of fields) byId(id).setAttribute('aria-invalid', 'true');
+    if (fields.length) byId(fields.at(-1)).focus();
   } finally { credentials.password = ''; credentials.apiKey = ''; byId('password').value = ''; byId('sign-in').disabled = false; }
 });
 initialize();

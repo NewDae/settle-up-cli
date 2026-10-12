@@ -60,7 +60,7 @@ Reusable inputs and backend response samples live in [test/helpers/spec-fixtures
 
 These local tests verify what the wrapper sends and returns. They do not prove backend persistence, permissions, debt calculation, or how the backend applies a PATCH. Those behaviors require live backend checks; see the live-suite coverage and end-to-end limitations below.
 
-Direct browser tests also verify the real page controller sends key/email/password only to Firebase, sanitizes failures, encrypts the returned session, and posts only ciphertext to the relay.
+Direct browser tests also verify the real page controller sends key/email/password only to Firebase, maps known Firebase errors to actionable copy/field highlights without revealing raw responses or account existence, verifies correction and retry, encrypts the returned session, and posts only ciphertext to the relay.
 
 ## Live Backend Suite
 
