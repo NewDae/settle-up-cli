@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { createSessionStore } from './lib/session-store.mjs';
 import { createBrowserLogin } from './lib/browser-login.mjs';
+import { FIREBASE_WEB_API_KEY } from './lib/firebase-browser-login.mjs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
@@ -13,6 +14,8 @@ loadDotEnv();
 
 const ENVIRONMENT = process.env.SETTLEUP_ENV || 'production';
 const DEFAULT_API_BASE_URL = ENVIRONMENT === 'production' ? 'https://settle-up-live.firebaseio.com' : '';
+// The CLI no longer contacts a hosted auth service. This former auth URL only
+// keeps existing session namespaces stable.
 const DEFAULT_AUTH_BASE_URL = ENVIRONMENT === 'production' ? 'https://settleup-production.newdae.workers.dev' : '';
 const VERSION = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const API_BASE_URL = (process.env.SETTLEUP_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '');
@@ -96,25 +99,9 @@ function requireApiBaseUrl() {
   return API_BASE_URL;
 }
 
-function requireAuthBaseUrl() {
-  if (!AUTH_BASE_URL) {
-    throw Object.assign(new Error('Missing SETTLEUP_AUTH_BASE_URL or SETTLEUP_API_BASE_URL; set one in the environment or local .env'), {
-      cliCode: 'INVALID_INPUT',
-      details: { variable: 'SETTLEUP_AUTH_BASE_URL', environment: ENVIRONMENT },
-    });
-  }
-  return AUTH_BASE_URL;
-}
-
 function apiUrl(apiPath) {
   const base = requireApiBaseUrl();
   const clean = apiPath.startsWith('/') ? apiPath : `/${apiPath}`;
-  return `${base}${clean}`;
-}
-
-function authUrl(authPath) {
-  const base = requireAuthBaseUrl();
-  const clean = authPath.startsWith('/') ? authPath : `/${authPath}`;
   return `${base}${clean}`;
 }
 
@@ -161,7 +148,7 @@ function parseArgs(argv) {
   return { positional, flags };
 }
 
-async function promptCredentials() {
+async function promptCredentials({ askApiKey }) {
   let hideOutput = false;
   const output = new Writable({
     write(chunk, encoding, callback) {
@@ -174,11 +161,14 @@ async function promptCredentials() {
   rl.once('SIGINT', () => controller.abort());
   rl.once('close', () => controller.abort());
   try {
+    const apiKey = askApiKey
+      ? (await rl.question('Settle Up API key (starts with AIza): ', { signal: controller.signal })).trim()
+      : FIREBASE_API_KEY;
     const email = await rl.question('Email: ', { signal: controller.signal });
     promptOutput.write('Password: ');
     hideOutput = true;
     const password = await rl.question('', { signal: controller.signal });
-    return { email, password };
+    return { apiKey, email, password };
   } catch (error) {
     if (error.name === 'AbortError') {
       throw Object.assign(new Error('Login cancelled'), { cliCode: 'INVALID_INPUT' });
@@ -219,9 +209,9 @@ async function fetchApiData(apiPath, options = {}) {
   return unwrapApiEnvelope(await fetchJson(apiUrl(apiPath), options));
 }
 
-async function signInWithFirebase(email, password) {
+async function signInWithFirebase(email, password, apiKey) {
   const json = await fetchJson(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -234,10 +224,11 @@ async function signInWithFirebase(email, password) {
     uid: json.localId,
     email: json.email || email,
     expiresAt: Date.now() + (Number(json.expiresIn) * 1000),
+    firebaseApiKey: apiKey,
   };
 }
 
-async function refreshWithFirebase(refreshToken, apiKey = FIREBASE_API_KEY) {
+async function refreshWithFirebase(refreshToken, apiKey) {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -264,13 +255,14 @@ async function refreshWithFirebase(refreshToken, apiKey = FIREBASE_API_KEY) {
 
 async function refreshAuth(auth) {
   const apiKey = auth.firebaseApiKey || FIREBASE_API_KEY;
-  const json = apiKey
-    ? await refreshWithFirebase(auth.refreshToken, apiKey)
-    : unwrapApiEnvelope(await fetchJson(authUrl('/auth/refresh'), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ refreshToken: auth.refreshToken }),
-    }));
+  // Sessions from CLI 0.3 and earlier were refreshed by a hosted service and
+  // carry no key. That service is no longer used, so they need a new sign-in.
+  if (!apiKey) {
+    throw Object.assign(new Error('This saved session is from an older CLI version and can no longer be renewed; sign in again'), {
+      cliCode: 'AUTH_REFRESH_FAILED', details: {}, final: true,
+    });
+  }
+  const json = await refreshWithFirebase(auth.refreshToken, apiKey);
   const accessToken = json.accessToken || json.idToken;
   const next = {
     ...auth,
@@ -303,7 +295,7 @@ async function requireAuth() {
     try {
       return await refreshAuth(auth);
     } catch (error) {
-      if (error.cliCode === 'AUTH_STORAGE_FAILED') throw error;
+      if (error.cliCode === 'AUTH_STORAGE_FAILED' || error.final) throw error;
       throw Object.assign(new Error('Stored session could not be refreshed'), {
         cliCode: 'AUTH_REFRESH_FAILED',
         details: { cause: error.message },
@@ -1155,7 +1147,7 @@ async function main() {
           || typeof auth.refreshToken !== 'string' || !auth.refreshToken
           || typeof auth.uid !== 'string' || !auth.uid
           || typeof auth.email !== 'string' || !auth.email
-          || typeof auth.firebaseApiKey !== 'string' || !/^[A-Za-z0-9_-]{20,256}$/.test(auth.firebaseApiKey)
+          || typeof auth.firebaseApiKey !== 'string' || !FIREBASE_WEB_API_KEY.test(auth.firebaseApiKey)
           || !Number.isFinite(auth.expiresAt) || auth.expiresAt <= Date.now()) {
         browserLogin.finish();
         throw Object.assign(new Error('Browser login did not return a complete session; start again'), { cliCode: 'AUTH_INVALID' });
@@ -1164,33 +1156,43 @@ async function main() {
       await ensureUserRecord(auth);
       return printJson(ok({ uid: auth.uid, email: auth.email, expiresAt: auth.expiresAt }));
     }
+    requireApiBaseUrl();
+    if (!input.isTTY && !FIREBASE_API_KEY) {
+      throw Object.assign(new Error('Non-interactive terminal login needs SETTLEUP_FIREBASE_API_KEY; or use `settleup auth login --browser`'), {
+        cliCode: 'INVALID_INPUT', details: { variable: 'SETTLEUP_FIREBASE_API_KEY' },
+      });
+    }
+    let apiKey = FIREBASE_API_KEY;
     let email;
     let password;
     if (input.isTTY) {
-      ({ email, password } = await promptCredentials());
+      ({ apiKey, email, password } = await promptCredentials({ askApiKey: !FIREBASE_API_KEY }));
     } else {
       const [emailLine, passwordLine] = fs.readFileSync(0, 'utf8').split(/\r?\n/);
       email = emailLine;
       password = passwordLine;
+    }
+    if (!FIREBASE_WEB_API_KEY.test(apiKey)) {
+      throw Object.assign(new Error('That is not a Firebase Web API key; it should start with AIza and be 39 characters'), {
+        cliCode: 'INVALID_INPUT', details: { field: 'firebaseApiKey' },
+      });
     }
     assertNonEmptyString(email, 'email');
     assertNonEmptyString(password, 'password');
     await sessionStore.check();
     let json;
     try {
-      json = FIREBASE_API_KEY
-        ? await signInWithFirebase(email, password)
-        : unwrapApiEnvelope(await fetchJson(authUrl('/auth/login'), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        }));
+      json = await signInWithFirebase(email, password, apiKey);
     } catch (error) {
       // A rejected sign-in is a credentials problem, not a group-access or
-      // connectivity one; Firebase answers 400 and hosted auth 401/403.
+      // connectivity one. Firebase answers 400 for both a bad key and a bad
+      // password; only the key case is safe to tell apart.
       if ([400, 401, 403].includes(error.details?.status) && !error.cliCode?.startsWith('AUTH_')) {
-        throw Object.assign(new Error('Sign-in was rejected; check the email and password'), {
-          cliCode: 'AUTH_INVALID', details: error.details,
+        const badKey = /API key not valid|API_KEY_INVALID|API_KEY_\w*BLOCKED|are blocked/i.test(JSON.stringify(error.details?.body ?? ''));
+        throw Object.assign(new Error(badKey
+          ? 'That API key was not accepted; check you copied the Settle Up key in full'
+          : 'Sign-in was rejected; check the email, password, and that you used the Settle Up API key'), {
+          cliCode: 'AUTH_INVALID', details: { status: error.details.status },
         });
       }
       throw error;
@@ -1203,6 +1205,7 @@ async function main() {
       uid: json.uid || json.localId,
       email: json.email || email,
       expiresAt: json.expiresAt || Date.now() + (Number(json.expiresIn) * 1000),
+      firebaseApiKey: apiKey,
     };
     if (!auth.accessToken || !auth.refreshToken || !auth.uid || !Number.isFinite(auth.expiresAt)) {
       throw Object.assign(new Error('Auth response did not include a complete session'), {
@@ -1467,9 +1470,9 @@ function recoveryDetails(error) {
   }
 
   const help = {
-    AUTH_REQUIRED: 'Run `settleup auth login --browser`, sign in privately in the browser, then run `settleup auth login --complete`. Private terminal login is also available.',
-    AUTH_INVALID: 'Check email/password sign-in. For Google or Apple accounts, follow https://settleup.app/migrate-account, then run `settleup auth login` privately.',
-    AUTH_REFRESH_FAILED: 'Run `settleup auth login --browser` and `settleup auth login --complete` to renew the session, or sign in privately in your terminal.',
+    AUTH_REQUIRED: 'Run `settleup auth login --browser`, have the user sign in privately on the page, then run `settleup auth login --complete`. Private terminal login (`settleup auth login`) is also available.',
+    AUTH_INVALID: 'Check the Settle Up API key and email/password sign-in. For Google or Apple accounts, follow https://settleup.app/migrate-account, then sign in again privately.',
+    AUTH_REFRESH_FAILED: 'Sign in again: run `settleup auth login --browser` and `settleup auth login --complete`, or `settleup auth login` privately in a terminal.',
     GROUP_NOT_FOUND: 'Run `settleup groups list` and use an exact returned group ID.',
     GROUP_ACCESS_DENIED: 'Confirm the group ID and the signed-in account\'s access using `settleup groups list`.',
     MEMBER_NOT_FOUND: 'Run `settleup members list --group-id <groupId>` and use returned member IDs, not account uids.',

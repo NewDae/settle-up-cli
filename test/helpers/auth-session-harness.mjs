@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const cli = fileURLToPath(new URL('../../bin/settleup.mjs', import.meta.url));
 const hook = new URL('./credential-hook.mjs', import.meta.url).href;
+export const DUMMY_FIREBASE_KEY = `AIza${'D'.repeat(35)}`;
 export const session = {
   accessToken: 'dummy-access', idToken: 'dummy-access', refreshToken: 'dummy-refresh',
   uid: 'dummy-user', email: 'dummy@example.invalid', expiresAt: Date.now() + 3_600_000,
@@ -28,6 +29,7 @@ export function authHarness({ native = false } = {}) {
           ...env, SETTLEUP_ENV: 'test', SETTLEUP_CLI_CONFIG_DIR: configDir,
           SETTLEUP_API_BASE_URL: 'https://credential-test.invalid/db',
           SETTLEUP_AUTH_BASE_URL: 'https://credential-test.invalid/auth',
+          SETTLEUP_FIREBASE_API_KEY: DUMMY_FIREBASE_KEY,
           CREDENTIAL_TEST_NATIVE: native ? '1' : '',
           CREDENTIAL_TEST_STORE: storePath, CREDENTIAL_TEST_LOG: logPath,
           ...changes,

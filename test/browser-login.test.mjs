@@ -34,7 +34,7 @@ function harness() {
     return { status: response.status, body: await response.json(), headers: response.headers };
   } };
 }
-const session = () => ({ accessToken: 'private-access-token', refreshToken: 'private-refresh-token', uid: 'test-user', email: 'person@example.invalid', expiresAt: Date.now() + 3_600_000, firebaseApiKey: 'test-firebase-api-key-12345' });
+const session = () => ({ accessToken: 'private-access-token', refreshToken: 'private-refresh-token', uid: 'test-user', email: 'person@example.invalid', expiresAt: Date.now() + 3_600_000, firebaseApiKey: `AIza${'B'.repeat(35)}` });
 
 test('encrypted handoff binds the browser link and decrypts only with the originating CLI key', async () => {
   const keys = await createLoginKey();
@@ -140,8 +140,8 @@ const original = globalThis.fetch;
 globalThis.fetch = async (url, options = {}) => {
   if (String(url).startsWith('${base}/')) return original(url, options);
   if (String(url).startsWith('https://db.test/users/test-user.json')) return Response.json({ name: 'Test user' });
-  if (String(url) === 'https://securetoken.googleapis.com/v1/token?key=test-firebase-api-key-12345') {
-    if (process.env.DIRECT_REFRESH_FAIL === '1') return Response.json({error:{message:'test-firebase-api-key-12345 private-refresh-token'}},{status:401});
+  if (String(url) === 'https://securetoken.googleapis.com/v1/token?key=AIza${'B'.repeat(35)}') {
+    if (process.env.DIRECT_REFRESH_FAIL === '1') return Response.json({error:{message:'AIza${'B'.repeat(35)} private-refresh-token'}},{status:401});
     if (new URLSearchParams(options.body).get('refresh_token') !== 'private-refresh-token') throw new Error('Incorrect refresh body');
     return Response.json({ id_token: 'new-access-token', refresh_token: 'new-refresh-token', user_id: 'test-user', expires_in: '3600' });
   }
@@ -200,7 +200,7 @@ test('real CLI start, pending, encrypted completion, status, direct Firebase ref
   assert.equal(rejected.output.error.code, 'AUTH_REFRESH_FAILED');
   assert.ok(!rejected.stdout.includes(value.firebaseApiKey));
   assert.ok(!rejected.stdout.includes(value.refreshToken));
-  assert.equal((await h.run(['users', 'me'], { SETTLEUP_FIREBASE_API_KEY: 'different-firebase-key-67890' })).code, 0);
+  assert.equal((await h.run(['users', 'me'], { SETTLEUP_FIREBASE_API_KEY: `AIza${'Z'.repeat(35)}` })).code, 0);
   const saved = fs.readdirSync(path.join(h.config, 'test')).find(name => name.startsWith('auth-'));
   assert.equal(JSON.parse(fs.readFileSync(path.join(h.config, 'test', saved))).accessToken, 'new-access-token');
   assert.equal((await h.run(['auth', 'logout'])).code, 0);

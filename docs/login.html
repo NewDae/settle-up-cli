@@ -25,12 +25,12 @@
       <section id="start-help" hidden class="login-card-help"><p>Ask your agent for a login link, or run:</p><pre>settleup auth login --browser</pre></section>
       <form id="login-form" hidden>
         <p class="login-warning"><strong>Only continue if you just asked your agent or CLI for this link.</strong> Whoever created it gets access to the account you sign in with. <span id="expiry"></span></p>
-        <label for="api-key">Settle Up Firebase API key</label><input id="api-key" name="firebase-api-key" type="password" autocomplete="off" required minlength="20" maxlength="256" spellcheck="false">
-        <p class="key-help">Use a Firebase Web API key for the Settle Up auth project. A key from your own Firebase project won’t work.</p>
         <label for="email">Settle Up email</label><input id="email" name="username" type="email" autocomplete="username" required maxlength="254">
         <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+        <label for="api-key">Settle Up API key</label><input id="api-key" name="settleup-api-key" type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required maxlength="256" placeholder="AIza…" aria-describedby="key-help">
+        <p id="key-help" class="key-help">The public Firebase key from Settle Up’s web app. It starts with “AIza” and isn’t a password. <a href="https://github.com/NewDae/settle-up-cli/blob/main/LOGIN.md#finding-the-api-key">Where to find it ↗</a></p>
         <button id="sign-in" class="button primary" type="submit">Sign in &amp; connect</button>
-        <p class="login-privacy">Your key and password go directly to Firebase. This site’s backend receives only an encrypted session. <a href="/#auth">How auth works ↗</a></p>
+        <p class="login-privacy">Your email, password, and key go straight from this page to Firebase, Settle Up’s sign-in provider. Our server only ever sees an encrypted session that your CLI alone can open. Your password is never saved. <a href="/#auth">How auth works ↗</a></p>
       </form>
       <section id="success" hidden class="login-card-help"><h2>You’re signed in.</h2><p>Return to your agent, or finish in your CLI. It will show the connected email; check that it’s yours.</p><pre>settleup auth login --complete</pre><p class="login-privacy">To disconnect later, run <code>settleup auth logout</code>.</p></section>
       <p id="migration-note" class="migration-note">Google or Apple account? <a href="https://settleup.app/migrate-account">Switch to email/password ↗</a></p>

@@ -20,7 +20,7 @@ for (const name of ['agent.md', 'llms.txt']) {
 }
 
 // The browser uses the same encryption and Firebase sign-in code as the tests.
-for (const [sourceName, targetName] of [['browser-crypto.mjs', 'login-crypto.js'], ['firebase-browser-login.mjs', 'firebase-browser-login.js']]) {
+for (const [sourceName, targetName] of [['browser-crypto.mjs', 'login-crypto.js'], ['firebase-browser-login.mjs', 'login-firebase.js']]) {
   const moduleSource = lf(await fs.readFile(new URL(`../bin/lib/${sourceName}`, import.meta.url), 'utf8'))
     .replace("'./browser-crypto.mjs'", "'./login-crypto.js'");
   const target = new URL(`../docs/${targetName}`, import.meta.url);

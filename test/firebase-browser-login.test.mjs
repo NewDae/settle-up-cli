@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import { createFirebaseHandoff } from '../bin/lib/firebase-browser-login.mjs';
 import { createLoginKey, decryptLogin } from '../bin/lib/browser-crypto.mjs';
 
-const apiKey = 'test-firebase-api-key-12345';
+const apiKey = `AIza${'T'.repeat(35)}`;
 const email = 'person@example.invalid';
 const password = 'private-test-password';
 const browserId = 'a'.repeat(64);
@@ -42,27 +42,33 @@ test('Firebase failures and malformed success responses do not expose provider d
       return true;
     });
   }
-  await assert.rejects(createFirebaseHandoff(input, async () => { throw new Error(secret); }), /Could not reach Firebase/);
-  await assert.rejects(createFirebaseHandoff(input, async () => new Response(secret)), /invalid sign-in response/);
+  await assert.rejects(createFirebaseHandoff(input, async () => { throw new Error(secret); }), /Couldn’t reach the sign-in service/);
+  await assert.rejects(createFirebaseHandoff(input, async () => new Response(secret)), /unexpected response/);
   for (const value of [null, {}, { ...providerSession(), refreshToken: '' }, { ...providerSession(), expiresIn: '-1' }, { ...providerSession(), expiresIn: 'Infinity' }]) {
     await assert.rejects(createFirebaseHandoff(input, async () => Response.json(value)), /incomplete session/);
   }
-  await assert.rejects(createFirebaseHandoff({ ...input, apiKey: '' }, async () => { throw new Error('Must not send'); }), /Enter the complete Firebase Web API key/);
+  for (const bad of ['', 'test-firebase-api-key-12345', `${apiKey}x`]) {
+    await assert.rejects(createFirebaseHandoff({ ...input, apiKey: bad }, async () => { throw new Error('Must not send'); }), error => {
+      assert.match(error.message, /start with “AIza”/); assert.equal(error.field, 'api-key'); return true;
+    });
+  }
+  await assert.rejects(createFirebaseHandoff({ ...input, email: '' }, async () => { throw new Error('Must not send'); }), /Enter your Settle Up email/);
+  await assert.rejects(createFirebaseHandoff({ ...input, password: '' }, async () => { throw new Error('Must not send'); }), /Enter your Settle Up password/);
 });
 
 test('Firebase error categories explain the problem and next step without displaying raw provider text', async () => {
   const keys = await createLoginKey();
   const input = { apiKey, email, password, publicKey: keys.publicKey, browserId };
   const cases = [
-    ['API_KEY_INVALID', 400, /rejected this API key.*Copy the complete/s, 'api-key'],
-    ['INVALID_API_KEY', 400, /rejected this API key/, 'api-key'],
-    ['API_KEY_SERVICE_BLOCKED', 403, /does not allow.*Ask the key owner/s, 'api-key'],
-    ['API_KEY_HTTP_REFERRER_BLOCKED', 403, /restrictions block.*browser-compatible key/s, 'api-key'],
-    ['OPERATION_NOT_ALLOWED', 400, /Email\/password sign-in is disabled.*key owner/s, 'api-key'],
-    ['CONFIGURATION_NOT_FOUND', 400, /not configured or enabled.*key owner/s, 'api-key'],
-    ['INVALID_EMAIL', 400, /email address is not valid.*Enter your Settle Up/s, 'email'],
-    ['USER_DISABLED', 400, /account is disabled.*contact Settle Up support/s, undefined],
-    ['TOO_MANY_ATTEMPTS_TRY_LATER', 400, /temporarily limited.*Wait before retrying/s, undefined],
+    ['API_KEY_INVALID', 400, /API key wasn’t accepted.*copied the Settle Up key in full/s, 'api-key'],
+    ['INVALID_API_KEY', 400, /API key wasn’t accepted/, 'api-key'],
+    ['API_KEY_SERVICE_BLOCKED', 403, /can’t be used to sign in.*Settle Up key/s, 'api-key'],
+    ['API_KEY_HTTP_REFERRER_BLOCKED', 403, /can’t be used to sign in.*Settle Up key/s, 'api-key'],
+    ['OPERATION_NOT_ALLOWED', 400, /different service.*Settle Up key/s, 'api-key'],
+    ['CONFIGURATION_NOT_FOUND', 400, /different service/, 'api-key'],
+    ['INVALID_EMAIL', 400, /email address isn’t valid/, 'email'],
+    ['USER_DISABLED', 400, /account has been disabled.*Settle Up support/s, undefined],
+    ['TOO_MANY_ATTEMPTS_TRY_LATER', 400, /Too many sign-in attempts.*Wait/s, undefined],
   ];
   for (const [code, status, expected, field] of cases) {
     for (const error of [{ message: `${code} : ${password}` }, { message: password, details: [{ reason: code, metadata: { key: apiKey } }] }]) {
@@ -74,10 +80,12 @@ test('Firebase error categories explain the problem and next step without displa
       });
     }
   }
+  // Firebase's plain invalid-key message, without a structured reason.
+  await assert.rejects(createFirebaseHandoff(input, async () => Response.json({ error: { message: 'API key not valid. Please pass a valid API key.' } }, { status: 400 })), /API key wasn’t accepted/);
   const accountMessages = [];
   for (const code of ['INVALID_LOGIN_CREDENTIALS', 'EMAIL_NOT_FOUND', 'INVALID_PASSWORD']) {
     await assert.rejects(createFirebaseHandoff(input, async () => Response.json({ error: { message: code } }, { status: 400 })), failure => {
-      assert.match(failure.message, /did not accept this email\/password.*Re-enter.*auth project/s);
+      assert.match(failure.message, /Check your email and password.*Settle Up key/s);
       assert.equal(failure.field, 'credentials'); accountMessages.push(failure.message); return true;
     });
   }
@@ -111,7 +119,7 @@ test('actual login-page controller sends credentials to Firebase and only cipher
   assert.equal(element('login-form').hidden, false);
   element('api-key').value = apiKey; element('email').value = email; element('password').value = password;
   await element('login-form').submit({ preventDefault() {} });
-  assert.match(element('status').textContent, /Firebase rejected this API key/);
+  assert.match(element('status').textContent, /API key wasn’t accepted/);
   assert.equal(element('api-key')['aria-invalid'], 'true');
   assert.equal(element('api-key').focused, true);
   assert.equal(element('password').value, '');
