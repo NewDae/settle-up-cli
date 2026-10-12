@@ -24,7 +24,9 @@ Your session is kept in your operating system's credential store: macOS Keychain
 
 Visit the [landing page](https://settleupcli.pages.dev/), choose your agent, and copy its setup prompt into your conversation. The agent reads the [installation and everyday usage guide](https://settleupcli.pages.dev/agent.md), checks its tools, and helps you connect.
 
-Your agent needs terminal access. Sign in privately on the same computer where the CLI runs; never paste passwords or session tokens into chat.
+The [hosted auth server source](https://github.com/NewDae/settle-up-cli/tree/main/server/auth-worker) is open source alongside the CLI and website.
+
+Your agent needs terminal access. It runs `settleup auth login --browser` and gives you a private login link. Sign in on the hosted page, then the agent runs `settleup auth login --complete`. Your browser can be on a different computer from the CLI. The Firebase API key stays in the hosted auth Worker; your password is used for verification and is not saved. Never paste passwords or session tokens into chat. Only sign in through a link you just asked for, and check that the agent reports your email afterwards. See [how auth works](https://settleupcli.pages.dev/#auth) and the [security model](LOGIN.md#browser-login-security-model).
 
 Try asking:
 

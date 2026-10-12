@@ -4,7 +4,7 @@ This project tests the CLI in three layers:
 
 | Layer | Command | Purpose |
 |---|---|---|
-| Local deterministic suite | `npm test` | Runs the real CLI; scripted HTTP responses verify validation, output, and outgoing requests without network access. |
+| Local deterministic suite | `npm test` | Runs the real CLI; scripted responses verify requests without external network access. Browser-login tests use a localhost HTTP server and real SQLite SQL. |
 | Live backend suite | `npm run test:live` | Verifies configured staging backend behavior against real APIs. |
 | CLI end-to-end workflow | `npm run integration:e2e` | Exercises the actual CLI through a full staging user journey and writes a report. |
 
@@ -52,6 +52,8 @@ What it covers:
 | Read commands | `groups list`, `members list` (including `--active-only`), `members get`, `categories list`, `transactions get`, and `transactions delete` send the expected request and shape; missing records return `MEMBER_NOT_FOUND` or `TRANSACTION_NOT_FOUND`. |
 | List filters | Every `transactions list` filter, including recipient-only member matches and inclusive local-day `--to` bounds; ordering and limits for transactions and changes; invalid filter values fail with `INVALID_INPUT` before any request. |
 | Sign-in and sessions | Rejected hosted and direct Firebase sign-in return `AUTH_INVALID` while outages stay `API_REQUEST_FAILED`; first sign-in creates the user profile; sessions refresh within the final minute but not earlier; backend 401 maps to `GROUP_ACCESS_DENIED`. |
+| Auth Worker | Login/refresh Firebase mapping, closed browser access, validation, rate-limit binding, stable failures without upstream Firebase codes, no credential logging, and no-store responses. |
+| Browser login | Pairing and pending state, private-key file permissions, encrypted handoff, wrong-key/tampering rejection, one-time collection, expiry, cancellation, same-origin checks, bounded inputs, rate limiting, sanitized hosted-auth failures, and hosted Worker refresh. Firebase API keys and readable tokens are never returned to the page. |
 | Server task | Debt recalculation constructs `{ request: { groupId } }`; a missing group ID is rejected locally. |
 
 Reusable inputs and backend response samples live in [test/helpers/spec-fixtures.mjs](test/helpers/spec-fixtures.mjs). [test/helpers/cli-harness.mjs](test/helpers/cli-harness.mjs) launches the executable with isolated configuration and a fresh test session, captures outgoing requests, and supplies scripted responses. Unexpected requests fail; temporary files are removed after each run. Validation lives in the CLI, with no parallel test-only implementation.

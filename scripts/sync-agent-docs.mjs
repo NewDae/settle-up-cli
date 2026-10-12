@@ -18,3 +18,11 @@ for (const name of ['agent.md', 'llms.txt']) {
     await fs.writeFile(target, generated);
   }
 }
+
+const indexTarget = new URL('../docs/index.html', import.meta.url);
+const index = lf(await fs.readFile(indexTarget, 'utf8'));
+const escapeHtml = text => text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#x27;');
+const updatedIndex = index.replace(/(<pre class="markdown-source">)[\s\S]*?(<\/pre>)/, (_, start, end) => start + escapeHtml(source) + end);
+if (check) {
+  if (index !== updatedIndex) { console.error('docs/index.html machine guide is stale. Run npm run docs:sync.'); process.exitCode = 1; }
+} else await fs.writeFile(indexTarget, updatedIndex);

@@ -82,9 +82,9 @@ The executable is `settleup`. Write JSON is supplied with `--input <path>` or `-
 
 | Command | Required flags / input | Behavior |
 |---|---|---|
-| `auth login` | None | Email/password sign-in; store a local session. Private interactive input is the user/agent workflow; non-TTY automation accepts email and password on separate stdin lines. |
+| `auth login` | Optional `--browser`, or `--complete [--wait]` | Start a private hosted login link, then collect an encrypted session once. Without flags, use private terminal email/password; non-TTY automation accepts separate stdin lines. |
 | `auth status` | None | Report local session presence, selected `storage`, `uid`, email, expiry; does not confirm live access. |
-| `auth logout` | None | Delete the local session. |
+| `auth logout` | None | Delete the local session and cancel pending browser login. |
 | `users me` | None | Fetch the authenticated user's profile. |
 | `groups list` | None | List groups accessible to the current user. |
 | `groups get` | `--group-id` | Fetch group metadata, permissions, and the caller's group link. |
@@ -453,7 +453,7 @@ The original design principles remain the basis of the CLI. This table preserves
 | Earlier statement / requirement | Current status |
 |---|---|
 | No hidden lookup before writes | Exact-ID member validation performs a backend read before transaction writes; group creation reads its permission-created stub. No fuzzy name lookup is added. |
-| Interactive login only | Private interactive sign-in remains the recommended user/agent workflow. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
+| Interactive login only | Browser login (`auth login --browser` / `--complete`) is the recommended agent workflow: the user signs in on a hosted page, and the CLI collects an encrypted session. Private terminal sign-in remains for people at a terminal. Non-TTY stdin login supports automated integration runs; there are no credential command flags. |
 | Do not bundle project configuration; require runtime config | Published package bundles production database/hosted-auth URLs for zero-config use, but no Firebase key or user/session secrets. Environment overrides remain available. |
 | Prefer OS keychain, with restricted-file fallback | Implemented: OS credential store by default; plaintext requires explicit `SETTLEUP_AUTH_STORAGE=file`. Sessions are isolated by config directory, environment, and endpoints, with verified legacy migration and storage-specific recovery; details in [LOGIN.md](LOGIN.md#credential-storage). |
 | Exact schema with field meanings and example invocation | Implemented: schema output includes field types/descriptions, required/optional status, nested fields, examples, and invocation. Shared field descriptions keep expense/transfer and add/patch metadata aligned. |

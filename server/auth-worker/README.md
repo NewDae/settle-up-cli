@@ -1,0 +1,50 @@
+# Settle Up auth Worker
+
+The auth server, CLI, and browser-login website are maintained together in this repository under its [MIT license](../../LICENSE). The Worker stays a separate Cloudflare deployment; moving its source does not change its endpoints or expose its runtime secrets.
+
+`src/index.mjs` and `wrangler.toml` were imported from the former auth repository at commit `3811c502cde8d5b032e996da5895c7915a80d1c5`, with deployment identities unchanged. The one behavior change since import: error responses no longer include upstream Firebase error codes (for example `EMAIL_NOT_FOUND`), which allowed account enumeration. Make future auth-server changes here.
+
+## What runs here
+
+- `POST /auth/login` verifies email/password with Firebase and returns a session.
+- `POST /auth/refresh` exchanges a refresh token for a refreshed session.
+- Validation, an 8 KB request limit, stable errors that do not reveal whether an account exists, `Cache-Control: no-store`, and a shared per-IP auth rate limit.
+- No database proxy, signup, password persistence, or credential logging. The CLI calls these endpoints directly; the website calls them through its internal `AUTH_SERVICE` binding. No CORS headers are sent, so other websites cannot call the Worker from a browser.
+
+Existing deployment identities are retained:
+
+| Environment | Worker | Rate-limit namespace |
+| --- | --- | --- |
+| Staging | `settleup-staging` | `12001` |
+| Production | `settleup-production` | `12002` |
+
+The rate limit is 10 requests per 60 seconds, shared across login and refresh for each caller IP and environment. See [LOGIN.md](../../LOGIN.md) for the session flow and [API_REFERENCE.md](../../API_REFERENCE.md) for endpoint mapping.
+
+## Configuration and commands
+
+Keep `SETTLEUP_FIREBASE_API_KEY` and `SETTLEUP_API_BASE_URL` as secrets on the corresponding existing Cloudflare Worker. A source relocation does not require copying or re-uploading them. The code reads these bindings at runtime; no real values are included in this directory.
+
+From the repository root:
+
+```sh
+npm run test:auth-worker
+npm run auth:dev
+# Deploy only when intended; these update the existing Worker deployments:
+npm run auth:deploy:staging
+npm run auth:deploy:production
+```
+
+For local development only, create ignored `server/auth-worker/.dev.vars.staging`:
+
+```dotenv
+SETTLEUP_API_BASE_URL=https://settle-up-sandbox.firebaseio.com
+SETTLEUP_FIREBASE_API_KEY=<sandbox Firebase Web API key>
+```
+
+Use sandbox configuration locally. Worker dev starts from this directory, so it does not load the CLI's root environment files. Run the website separately with `npx wrangler pages dev docs --service AUTH_SERVICE=settleup-staging`; see [DEVELOPMENT.md](../../DEVELOPMENT.md#browser-login-website).
+
+## Publication and self-hosting
+
+Worker source and configuration are public, so you can read them or deploy your own copy. See [self-hosting](../../LOGIN.md#self-hosting). Real `.env` and `.dev.vars` files stay ignored. The npm package includes only its existing client allowlist, and the website serves only `docs/`; Worker source is not shipped as a browser asset or installed CLI module.
+
+Operators: limit who has Worker deployment permission, since it grants access to runtime secrets. Review changes before deploying, and keep credentials out of logs.

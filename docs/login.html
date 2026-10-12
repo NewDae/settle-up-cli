@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/login.css">
+  <script type="module" src="/login.js"></script>
+  <title>Connect your account — Settle Up CLI</title>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="page login-page">
+    <header>
+      <a class="wordmark" href="/" aria-label="Settle Up CLI home"><span class="mark" aria-hidden="true">↗</span> settleup<span class="cli">/ cli</span></a>
+      <nav class="site-nav" aria-label="Main navigation"><div class="audience-switch" aria-label="Choose human or machine view"><a href="/" data-audience="human">HUMAN</a><a href="/?view=machine" data-audience="machine">MACHINE</a></div></nav>
+    </header>
+    <main id="main" class="login-main">
+      <h1>Sign in to Settle Up.</h1>
+      <p class="login-intro">Connect your account to your CLI.</p>
+      <div id="status" class="login-status" role="status" aria-live="polite">Checking your login link…</div>
+      <section id="start-help" hidden class="login-card-help"><p>Ask your agent for a login link, or run:</p><pre>settleup auth login --browser</pre></section>
+      <form id="login-form" hidden>
+        <p class="login-warning"><strong>Only continue if you just asked your agent or CLI for this link.</strong> Whoever created it gets access to the account you sign in with. <span id="expiry"></span></p>
+        <label for="email">Settle Up email</label><input id="email" name="username" type="email" autocomplete="username" required maxlength="254">
+        <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button id="sign-in" class="button primary" type="submit">Sign in &amp; connect</button>
+        <p class="login-privacy">Your password is checked with Firebase, Settle Up’s sign-in provider, and never saved. Your agent and CLI never see it; the CLI receives an encrypted session only it can open. <a href="/#auth">How auth works ↗</a></p>
+      </form>
+      <section id="success" hidden class="login-card-help"><h2>You’re signed in.</h2><p>Return to your agent, or finish in your CLI. It will show the connected email; check that it’s yours.</p><pre>settleup auth login --complete</pre><p class="login-privacy">To disconnect later, run <code>settleup auth logout</code>.</p></section>
+      <p id="migration-note" class="migration-note">Google or Apple account? <a href="https://settleup.app/migrate-account">Switch to email/password ↗</a></p>
+    </main>
+    <footer><p>Built by <a href="https://github.com/NewDae">NewDae</a> · An open-source community tool for <a href="https://settleup.app/">Settle Up</a>.</p><div><a href="https://github.com/NewDae/settle-up-cli">☆ Star / source</a><a href="https://www.npmjs.com/package/settle-up-cli">npm</a><a href="https://github.com/NewDae/settle-up-cli/blob/main/LICENSE">MIT license</a></div></footer>
+  </div>
+</body>
+</html>

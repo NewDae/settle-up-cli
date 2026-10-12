@@ -24,6 +24,18 @@ When `SETTLEUP_FIREBASE_API_KEY` is present, the CLI bypasses hosted auth:
 
 Database paths still use the database URL, independently of the auth URL.
 
+## Browser Login Endpoints
+
+Served by the website's Pages Functions at `<SETTLEUP_LOGIN_BASE_URL>/api/login/<action>` (production: `https://settleupcli.pages.dev`). All are `POST` with a JSON body and reject unknown fields. [LOGIN.md](LOGIN.md#browser-login-security-model) describes the security model.
+
+| Action | Caller | Body | Returns |
+|---|---|---|---|
+| `start` | CLI | `{ publicKey }` | `{ browserId, deviceToken, expiresAt, interval }`; rate-limited per IP |
+| `context` | Login page (same origin only) | `{ browserId }` | `{ publicKey, expiresAt }` |
+| `complete` | Login page (same origin only) | `{ browserId, email, password }` | `{ status: "ready" }`; verifies through the auth Worker's `/auth/login` via the `AUTH_SERVICE` binding |
+| `poll` | CLI | `{ deviceToken }` | `{ status: "pending" }`, or `{ status: "ready", envelope }` once, then the row is deleted |
+| `cancel` | CLI | `{ deviceToken }` | `{ status: "cancelled" }` |
+
 ## Backend Paths
 
 Backend paths are under:
@@ -55,8 +67,10 @@ Backend paths are under:
 | CLI command | Backend calls |
 |---|---|
 | `auth login` | `POST /auth/login`; then ensures `/users/<uid>` exists. |
+| `auth login --browser` | `POST /api/login/start` on the login website. |
+| `auth login --complete [--wait]` | `POST /api/login/poll` until ready; then ensures `/users/<uid>` exists. |
 | `auth status` | Local credential store (or explicit file storage); see LOGIN.md. |
-| `auth logout` | Local credential store (or explicit file storage); see LOGIN.md. |
+| `auth logout` | Local credential store (or explicit file storage); `POST /api/login/cancel` if a browser login is pending. |
 | `users me` | `GET /users/<uid>`. |
 | `groups list` | `GET /userGroups/<uid>`, then `GET /groups/<groupId>` for each group. |
 | `groups get` | `GET /groups/<groupId>`, `GET /permissions/<groupId>`, `GET /userGroups/<uid>/<groupId>`. |
