@@ -1,10 +1,10 @@
-# Settle Up legacy auth Worker
+# Settle Up auth Worker (retired)
 
 The auth server, CLI, and browser-login website are maintained together in this repository under its [MIT license](../../LICENSE). The Worker stays a separate Cloudflare deployment; moving its source does not change its endpoints or expose its runtime secrets.
 
 `src/index.mjs` and `wrangler.toml` were imported from the former auth repository at commit `3811c502cde8d5b032e996da5895c7915a80d1c5`, with deployment identities unchanged. The one behavior change since import: error responses no longer include upstream Firebase error codes (for example `EMAIL_NOT_FOUND`), which allowed account enumeration. Make future auth-server changes here.
 
-CLI 0.4.0+ browser login does not use this Worker. It verifies directly with Firebase and uses `server/browser-login.mjs` only as an encrypted relay. This source and its deployments are retained for legacy terminal login and 0.3.0 clients; do not remove the deployed Worker without a separate migration.
+CLI 0.4.0 and the current login site do not use this Worker: both sign in and refresh directly with Firebase using the user's Settle Up API key. The source and deployments remain only for CLI 0.3 and earlier. Shutting it down signs those clients out at their next refresh; they can recover by updating to 0.4.0.
 
 ## What runs here
 

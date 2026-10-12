@@ -11,7 +11,7 @@ const KEY_REJECTED = /API key not valid|API_KEY_INVALID|API_KEY_\w*BLOCKED|are b
 // ciphertext for the CLI, never a readable session to send to the relay.
 export async function createFirebaseHandoff({ apiKey, email, password, publicKey, browserId }, fetchImpl = fetch) {
   if (typeof apiKey !== 'string' || !FIREBASE_WEB_API_KEY.test(apiKey)) {
-    throw new Error('That doesn’t look like a Firebase API key. It starts with “AIza” and is 39 characters long.');
+    throw new Error('That doesn’t look like the API key. It should start with “AIza” (capital I) and be 39 characters long.');
   }
   if (typeof email !== 'string' || !email || email.length > 254
       || typeof password !== 'string' || !password || password.length > 4096) {

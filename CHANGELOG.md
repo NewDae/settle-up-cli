@@ -2,10 +2,19 @@
 
 ## 0.4.0 (unreleased)
 
-- Browser login now asks for a compatible Settle Up Firebase Web API key with email/password and sends them directly to Firebase. The browser encrypts tokens and the refresh key before sending them to the backend; Pages no longer calls or binds an auth Worker.
-- New browser sessions save the supplied key in the selected CLI credential store and refresh directly with Firebase. The password is never handed to the CLI or relay.
-- Protocol version 2 requires CLI 0.4.0+ and pins the encryption key to the original login-link fragment. Mixed website/client versions fail before verification. Existing terminal login and legacy-session refresh remain supported.
-- Update the login page, auth FAQ, agent instructions, self-hosting/deployment guidance, and tests for the encrypted-only backend.
+### Changed
+
+- **Sign-in no longer uses the hosted auth Worker.** You now enter the Settle Up API key (the public Firebase key Settle Up's apps use, starting with `AIza`) along with your email and password. `LOGIN.md` explains how to find it.
+- Browser login sends your email, password, and key straight to Firebase. The browser encrypts the session and key for your CLI before anything reaches the login site, whose backend is now only an encrypted relay with no auth binding or secrets.
+- Terminal login (`settleup auth login`) prompts for the key, or reads `SETTLEUP_FIREBASE_API_KEY`, and signs in directly with Firebase. Non-interactive terminal login requires that variable.
+- The CLI saves the key with your session and renews it directly with Firebase.
+- Login protocol version 2 pins the encryption key to the original link. Login links and the login site require CLI 0.4.0+.
+- The login page reports a mistyped or rejected key separately from a wrong email or password.
+
+### Upgrading
+
+- Sessions saved by 0.3 can't be renewed and will ask you to sign in again within an hour of upgrading.
+- `SETTLEUP_AUTH_BASE_URL` is deprecated and no longer contacted.
 
 ## 0.3.0 (2026-10-12)
 

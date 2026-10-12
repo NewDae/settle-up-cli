@@ -48,7 +48,7 @@ test('Firebase failures and malformed success responses do not expose provider d
     await assert.rejects(createFirebaseHandoff(input, async () => Response.json(value)), /incomplete session/);
   }
   for (const bad of ['', 'test-firebase-api-key-12345', `${apiKey}x`]) {
-    await assert.rejects(createFirebaseHandoff({ ...input, apiKey: bad }, async () => { throw new Error('Must not send'); }), /starts with “AIza”/);
+    await assert.rejects(createFirebaseHandoff({ ...input, apiKey: bad }, async () => { throw new Error('Must not send'); }), /start with “AIza”/);
   }
   await assert.rejects(createFirebaseHandoff({ ...input, password: '' }, async () => { throw new Error('Must not send'); }), /email and password/);
 });

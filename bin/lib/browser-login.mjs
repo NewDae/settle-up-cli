@@ -64,7 +64,7 @@ export function createBrowserLogin({ configDir, environment, apiBaseUrl, authBas
       return {
         status: 'pending', loginUrl: `${base}/login#${result.browserId}.${encodeURIComponent(keys.publicKey)}`,
         expiresAt: result.expiresAt,
-        next: 'Open loginUrl privately and enter your Settle Up Firebase API key, email, and password, then run settleup auth login --complete. Never send API keys, passwords, or tokens in chat.',
+        next: 'Open loginUrl privately and enter your Settle Up email, password, and API key, then run settleup auth login --complete. Never send API keys, passwords, or tokens in chat.',
       };
     },
     async complete({ wait = false } = {}) {

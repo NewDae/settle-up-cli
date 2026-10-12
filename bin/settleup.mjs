@@ -1173,7 +1173,7 @@ async function main() {
       password = passwordLine;
     }
     if (!FIREBASE_WEB_API_KEY.test(apiKey)) {
-      throw Object.assign(new Error('That is not a Firebase Web API key; it should start with AIza and be 39 characters'), {
+      throw Object.assign(new Error('That does not look like the Settle Up API key; it should start with AIza (capital I) and be 39 characters'), {
         cliCode: 'INVALID_INPUT', details: { field: 'firebaseApiKey' },
       });
     }

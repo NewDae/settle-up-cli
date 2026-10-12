@@ -14,6 +14,9 @@
 .login-warning strong { font-weight:600; }
 .login-privacy { font-size:11px; line-height:1.7; color:var(--muted); margin:14px 0; }
 .key-help { font-size:11px; line-height:1.6; color:var(--muted); margin:7px 0 16px; }
+/* A monospace face keeps the capital I in "AIza" distinct from a lowercase l. */
+#api-key, .key-help code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+#api-key { font-size:14px; }
 .migration-note { margin:28px 0 0; font-size:12px; color:var(--muted); }
 .login-card-help { padding:20px; border:1px solid var(--line); border-radius:7px; background:#fffefa; }
 .login-card-help h2 { font-size:19px; margin:0 0 8px; }
