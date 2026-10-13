@@ -54,7 +54,7 @@ The full requirements, identity model, patch semantics and open questions are in
 - **One executable.** `bin/settleup.mjs` holds the command table (`HELP`), input schemas (`SCHEMAS`), validators, request helpers and error recovery. It has no runtime dependencies apart from the keyring module.
 - **The session store** (`bin/lib/session-store.mjs`) handles session read, write, migration and deletion. Each session is scoped by config directory, environment, database URL and the deprecated auth URL setting.
 - **Environments.** `production` uses packaged defaults. `staging` and local setups need explicit URLs. See [LOGIN.md](../LOGIN.md#configuration-reference).
-- **The login relay** (`server/browser-login.mjs`, served by Pages Functions) only stores encrypted handoffs in D1. It needs no secrets and can be [self-hosted](../LOGIN.md#self-hosting). The retired auth Worker source in [`server/auth-worker/`](../server/auth-worker/README.md) serves only CLI 0.3 and earlier.
+- **The login relay** (`server/browser-login.mjs`, served by Pages Functions) only stores encrypted handoffs in D1. It needs no secrets and can be [self-hosted](../LOGIN.md#self-hosting).
 - **The backend mapping** from each command to its endpoint is in [API_REFERENCE.md](../API_REFERENCE.md).
 
 ## Developing

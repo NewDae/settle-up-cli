@@ -85,7 +85,7 @@ Deploy `docs/`, the Pages Functions, and the D1 migration to your own Cloudflare
 
 ## Upgrading from 0.3
 
-CLI 0.3 and earlier signed in and refreshed through a hosted auth Worker. 0.4.0 never contacts it. After upgrading, a saved 0.3 session keeps working until it next needs renewing (within an hour), then commands fail with `AUTH_REFRESH_FAILED` and ask you to sign in again. Sign in once with 0.4.0 and the CLI stores the key for future renewals. A login link from 0.3 won't work on the updated site: run `settleup auth logout`, update, and ask for a new link.
+CLI 0.3 and earlier signed in and refreshed through hosted auth endpoints, which were shut down on October 13, 2026. Those older CLIs can no longer sign in or renew sessions. Update with `npm install -g settle-up-cli@latest`, then sign in once with 0.4.0 or newer and the CLI stores the key for future renewals directly with Firebase. After upgrading, a saved 0.3 session keeps working until it next needs renewing (within an hour), then commands fail with `AUTH_REFRESH_FAILED` and ask you to sign in again. A login link from 0.3 won't work on the updated site: run `settleup auth logout`, update, and ask for a new link.
 
 ## Configuration reference
 
