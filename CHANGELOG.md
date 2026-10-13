@@ -1,6 +1,13 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## Unreleased
+
+### Removed
+
+- Retired auth Worker source, configuration, tests, deployment scripts, and developer instructions. Browser login continues to use the encrypted Pages/D1 relay; sign-in and refresh go directly to Firebase.
+- The old production and staging auth endpoints were shut down on October 13, 2026. CLI 0.3 and earlier must be updated to 0.4.0 or newer to sign in or renew sessions.
+
+## 0.4.0 (2026-10-12)
 
 ### Changed
 
